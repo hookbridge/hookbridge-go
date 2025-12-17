@@ -314,7 +314,7 @@ func TestLogs(t *testing.T) {
 
 			// Messages should be different
 			if len(firstPage.Messages) > 0 && len(secondPage.Messages) > 0 {
-				if firstPage.Messages[0].ID == secondPage.Messages[0].ID {
+				if firstPage.Messages[0].MessageID == secondPage.Messages[0].MessageID {
 					t.Error("Expected different messages on second page")
 				}
 			}
@@ -405,7 +405,7 @@ func TestAPIKeyManagement(t *testing.T) {
 		}
 
 		key := keys[0]
-		if key.ID == "" {
+		if key.KeyID == "" {
 			t.Error("Expected key ID to be non-empty")
 		}
 		if key.Prefix == "" {
@@ -420,7 +420,7 @@ func TestAPIKeyManagement(t *testing.T) {
 			t.Fatalf("CreateAPIKey failed: %v", err)
 		}
 
-		if newKey.ID == "" {
+		if newKey.KeyID == "" {
 			t.Error("Expected key ID to be non-empty")
 		}
 		if newKey.Key == "" {
@@ -431,7 +431,7 @@ func TestAPIKeyManagement(t *testing.T) {
 		}
 
 		// Delete the key we just created
-		err = client.DeleteAPIKey(ctx, newKey.ID)
+		err = client.DeleteAPIKey(ctx, newKey.KeyID)
 		if err != nil {
 			t.Fatalf("DeleteAPIKey failed: %v", err)
 		}
@@ -443,7 +443,7 @@ func TestAPIKeyManagement(t *testing.T) {
 		}
 
 		for _, k := range keysAfterDelete {
-			if k.ID == newKey.ID {
+			if k.KeyID == newKey.KeyID {
 				t.Error("Expected key to be deleted")
 			}
 		}

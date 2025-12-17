@@ -6,10 +6,10 @@ import "time"
 type MessageStatus string
 
 const (
-	StatusQueued        MessageStatus = "queued"
-	StatusDelivering    MessageStatus = "delivering"
-	StatusSucceeded     MessageStatus = "succeeded"
-	StatusPendingRetry  MessageStatus = "pending_retry"
+	StatusQueued          MessageStatus = "queued"
+	StatusDelivering      MessageStatus = "delivering"
+	StatusSucceeded       MessageStatus = "succeeded"
+	StatusPendingRetry    MessageStatus = "pending_retry"
 	StatusFailedPermanent MessageStatus = "failed_permanent"
 )
 
@@ -67,19 +67,22 @@ type Message struct {
 
 // MessageSummary represents a summary of a message for log listings.
 type MessageSummary struct {
-	ID             string        `json:"id"`
-	EndpointID     string        `json:"endpoint_id"`
-	Status         MessageStatus `json:"status"`
-	AttemptCount   int           `json:"attempt_count"`
-	CreatedAt      time.Time     `json:"created_at"`
-	ResponseStatus *int          `json:"response_status,omitempty"`
+	MessageID         string        `json:"message_id"`
+	Endpoint          string        `json:"endpoint"`
+	Status            MessageStatus `json:"status"`
+	AttemptCount      int           `json:"attempt_count"`
+	CreatedAt         string        `json:"created_at"`
+	DeliveredAt       *string       `json:"delivered_at,omitempty"`
+	ResponseStatus    *int          `json:"response_status,omitempty"`
+	ResponseLatencyMs *int          `json:"response_latency_ms,omitempty"`
+	LastError         *string       `json:"last_error,omitempty"`
 }
 
 // LogsResponse represents the response from querying logs.
 type LogsResponse struct {
-	Messages   []MessageSummary `json:"messages"`
-	HasMore    bool             `json:"has_more"`
-	NextCursor *string          `json:"next_cursor,omitempty"`
+	Messages   []MessageSummary
+	HasMore    bool
+	NextCursor *string
 }
 
 // LogsFilter represents filtering options for log queries.
@@ -104,19 +107,19 @@ type Metrics struct {
 
 // DLQMessage represents a message in the Dead Letter Queue.
 type DLQMessage struct {
-	ID           string    `json:"id"`
-	EndpointID   string    `json:"endpoint_id"`
-	AttemptCount int       `json:"attempt_count"`
-	LastError    string    `json:"last_error"`
-	CreatedAt    time.Time `json:"created_at"`
-	FailedAt     time.Time `json:"failed_at"`
+	MessageID    string `json:"message_id"`
+	Endpoint     string `json:"endpoint"`
+	AttemptCount int    `json:"attempt_count"`
+	LastError    string `json:"last_error"`
+	CreatedAt    string `json:"created_at"`
+	FailedAt     string `json:"failed_at"`
 }
 
 // DLQResponse represents the response from querying the DLQ.
 type DLQResponse struct {
-	Messages   []DLQMessage `json:"messages"`
-	HasMore    bool         `json:"has_more"`
-	NextCursor *string      `json:"next_cursor,omitempty"`
+	Messages   []DLQMessage
+	HasMore    bool
+	NextCursor *string
 }
 
 // DLQFilter represents filtering options for DLQ queries.
@@ -127,17 +130,20 @@ type DLQFilter struct {
 
 // APIKey represents an API key.
 type APIKey struct {
-	ID        string     `json:"id"`
-	Mode      APIKeyMode `json:"mode"`
-	Label     *string    `json:"label,omitempty"`
-	Prefix    string     `json:"prefix"`
-	CreatedAt time.Time  `json:"created_at"`
+	KeyID      string  `json:"key_id"`
+	Label      *string `json:"label,omitempty"`
+	Prefix     string  `json:"prefix"`
+	CreatedAt  string  `json:"created_at"`
+	LastUsedAt *string `json:"last_used_at,omitempty"`
 }
 
 // APIKeyWithSecret represents an API key with its full secret (returned on creation).
 type APIKeyWithSecret struct {
-	APIKey
-	Key string `json:"key"`
+	KeyID     string  `json:"key_id"`
+	Key       string  `json:"key"`
+	Label     *string `json:"label,omitempty"`
+	Prefix    string  `json:"prefix"`
+	CreatedAt string  `json:"created_at"`
 }
 
 // CreateAPIKeyRequest represents a request to create an API key.
@@ -168,4 +174,11 @@ type responseMeta struct {
 type apiError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// dlqDataResponse is the internal structure for DLQ responses.
+type dlqDataResponse struct {
+	Messages   []DLQMessage `json:"messages"`
+	HasMore    bool         `json:"has_more"`
+	NextCursor *string      `json:"next_cursor,omitempty"`
 }
