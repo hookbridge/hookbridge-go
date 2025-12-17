@@ -161,11 +161,16 @@ func (c *Client) GetLogs(ctx context.Context, filter *LogsFilter) (*LogsResponse
 		path += "?" + query.Encode()
 	}
 
-	var resp apiResponse[LogsResponse]
+	// Logs endpoint returns data as array, pagination in meta
+	var resp apiResponse[[]MessageSummary]
 	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
 	}
-	return &resp.Data, nil
+	return &LogsResponse{
+		Messages:   resp.Data,
+		HasMore:    resp.Meta.HasMore,
+		NextCursor: resp.Meta.NextCursor,
+	}, nil
 }
 
 // GetMetrics retrieves aggregated delivery metrics.
@@ -199,11 +204,20 @@ func (c *Client) GetDLQMessages(ctx context.Context, filter *DLQFilter) (*DLQRes
 		path += "?" + query.Encode()
 	}
 
-	var resp apiResponse[DLQResponse]
+	// DLQ endpoint returns data as object with messages array inside
+	var resp apiResponse[dlqDataResponse]
 	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
 	}
-	return &resp.Data, nil
+	messages := resp.Data.Messages
+	if messages == nil {
+		messages = []DLQMessage{}
+	}
+	return &DLQResponse{
+		Messages:   messages,
+		HasMore:    resp.Data.HasMore,
+		NextCursor: resp.Data.NextCursor,
+	}, nil
 }
 
 // ReplayFromDLQ replays a message from the Dead Letter Queue.
