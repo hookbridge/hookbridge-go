@@ -14,17 +14,21 @@ import (
 
 // Test configuration from environment variables
 var (
-	apiKey       = os.Getenv("HOOKBRIDGE_API_KEY")
-	baseURL      = os.Getenv("HOOKBRIDGE_BASE_URL")
-	testEndpoint = os.Getenv("HOOKBRIDGE_TEST_ENDPOINT")
+	apiKey          = os.Getenv("HOOKBRIDGE_API_KEY")
+	baseURL         = os.Getenv("HOOKBRIDGE_BASE_URL")
+	sendURL         = os.Getenv("HOOKBRIDGE_SEND_URL")
+	testEndpointURL = os.Getenv("HOOKBRIDGE_TEST_ENDPOINT_URL")
 )
 
 func init() {
 	if baseURL == "" {
 		baseURL = "https://api.hookbridge.io"
 	}
-	if testEndpoint == "" {
-		testEndpoint = "https://receiver.testing-hookbridge.io/webhook"
+	if sendURL == "" {
+		sendURL = "https://send.hookbridge.io"
+	}
+	if testEndpointURL == "" {
+		testEndpointURL = "https://example.com/webhooks/test"
 	}
 }
 
@@ -38,7 +42,7 @@ func skipIfNoCredentials(t *testing.T) {
 func newTestClient(t *testing.T) *hookbridge.Client {
 	t.Helper()
 	skipIfNoCredentials(t)
-	client, err := hookbridge.NewClient(apiKey, hookbridge.WithBaseURL(baseURL))
+	client, err := hookbridge.NewClient(apiKey, hookbridge.WithBaseURL(baseURL), hookbridge.WithSendURL(sendURL))
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -97,9 +101,22 @@ func TestWebhookSending(t *testing.T) {
 	client := newTestClient(t)
 	ctx := context.Background()
 
+	// Create a test endpoint for webhook sending tests
+	desc := "Integration test endpoint (Go)"
+	endpoint, err := client.CreateEndpoint(ctx, hookbridge.CreateEndpointRequest{
+		URL:         testEndpointURL,
+		Description: &desc,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create test endpoint: %v", err)
+	}
+	defer func() {
+		_ = client.DeleteEndpoint(ctx, endpoint.ID)
+	}()
+
 	t.Run("should send a webhook and return message ID", func(t *testing.T) {
 		result, err := client.Send(ctx, hookbridge.SendRequest{
-			Endpoint: testEndpoint,
+			EndpointID: endpoint.ID,
 			Payload: map[string]any{
 				"event":     "test.integration.go",
 				"timestamp": time.Now().Format(time.RFC3339),
@@ -120,8 +137,8 @@ func TestWebhookSending(t *testing.T) {
 
 	t.Run("should send a webhook with custom headers", func(t *testing.T) {
 		result, err := client.Send(ctx, hookbridge.SendRequest{
-			Endpoint: testEndpoint,
-			Payload:  map[string]string{"event": "test.headers"},
+			EndpointID: endpoint.ID,
+			Payload:    map[string]string{"event": "test.headers"},
 			Headers: map[string]string{
 				"X-Custom-Header": "test-value",
 				"X-Request-Id":    "integration-test-go-123",
@@ -140,7 +157,7 @@ func TestWebhookSending(t *testing.T) {
 		idempotencyKey := fmt.Sprintf("test-go-%d-%d", time.Now().UnixNano(), rand.Int())
 
 		result1, err := client.Send(ctx, hookbridge.SendRequest{
-			Endpoint:       testEndpoint,
+			EndpointID:     endpoint.ID,
 			Payload:        map[string]string{"event": "test.idempotent", "key": idempotencyKey},
 			IdempotencyKey: idempotencyKey,
 		})
@@ -150,7 +167,7 @@ func TestWebhookSending(t *testing.T) {
 
 		// Same request with same idempotency key should return same message ID
 		result2, err := client.Send(ctx, hookbridge.SendRequest{
-			Endpoint:       testEndpoint,
+			EndpointID:     endpoint.ID,
 			Payload:        map[string]string{"event": "test.idempotent", "key": idempotencyKey},
 			IdempotencyKey: idempotencyKey,
 		})
@@ -163,17 +180,17 @@ func TestWebhookSending(t *testing.T) {
 		}
 	})
 
-	t.Run("should reject invalid endpoint URL", func(t *testing.T) {
+	t.Run("should reject invalid endpoint ID", func(t *testing.T) {
 		_, err := client.Send(ctx, hookbridge.SendRequest{
-			Endpoint: "http://insecure.example.com", // HTTP not HTTPS
-			Payload:  map[string]string{"event": "test.invalid"},
+			EndpointID: "ep_nonexistent_12345",
+			Payload:    map[string]string{"event": "test.invalid"},
 		})
 		if err == nil {
-			t.Fatal("Expected error for invalid endpoint")
+			t.Fatal("Expected error for invalid endpoint ID")
 		}
-		var validationErr *hookbridge.ValidationError
-		if !errors.As(err, &validationErr) {
-			t.Errorf("Expected ValidationError, got %T: %v", err, err)
+		var notFoundErr *hookbridge.NotFoundError
+		if !errors.As(err, &notFoundErr) {
+			t.Errorf("Expected NotFoundError, got %T: %v", err, err)
 		}
 	})
 }
@@ -183,9 +200,22 @@ func TestMessageOperations(t *testing.T) {
 	client := newTestClient(t)
 	ctx := context.Background()
 
+	// Create a test endpoint
+	desc := "Message ops test endpoint (Go)"
+	endpoint, err := client.CreateEndpoint(ctx, hookbridge.CreateEndpointRequest{
+		URL:         testEndpointURL,
+		Description: &desc,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create test endpoint: %v", err)
+	}
+	defer func() {
+		_ = client.DeleteEndpoint(ctx, endpoint.ID)
+	}()
+
 	// Create a test message
 	sendResult, err := client.Send(ctx, hookbridge.SendRequest{
-		Endpoint: testEndpoint,
+		EndpointID: endpoint.ID,
 		Payload: map[string]any{
 			"event":     "test.message-ops.go",
 			"timestamp": time.Now().UnixNano(),
@@ -457,6 +487,133 @@ func TestAPIKeyManagement(t *testing.T) {
 		var notFoundErr *hookbridge.NotFoundError
 		if !errors.As(err, &notFoundErr) {
 			t.Errorf("Expected NotFoundError, got %T: %v", err, err)
+		}
+	})
+}
+
+// TestEndpointManagement tests endpoint CRUD operations
+func TestEndpointManagement(t *testing.T) {
+	client := newTestClient(t)
+	ctx := context.Background()
+
+	t.Run("should create, get, update, and delete an endpoint", func(t *testing.T) {
+		// Create
+		desc := "Test endpoint for CRUD operations"
+		endpoint, err := client.CreateEndpoint(ctx, hookbridge.CreateEndpointRequest{
+			URL:         "https://example.com/webhooks/test-endpoint",
+			Description: &desc,
+		})
+		if err != nil {
+			t.Fatalf("CreateEndpoint failed: %v", err)
+		}
+
+		if endpoint.ID == "" {
+			t.Error("Expected endpoint ID to be non-empty")
+		}
+		if endpoint.URL != "https://example.com/webhooks/test-endpoint" {
+			t.Errorf("Expected URL to match, got %s", endpoint.URL)
+		}
+		if endpoint.SigningSecret == "" {
+			t.Error("Expected signing secret to be non-empty")
+		}
+
+		// Get
+		retrieved, err := client.GetEndpoint(ctx, endpoint.ID)
+		if err != nil {
+			t.Fatalf("GetEndpoint failed: %v", err)
+		}
+		if retrieved.ID != endpoint.ID {
+			t.Errorf("Expected ID %s, got %s", endpoint.ID, retrieved.ID)
+		}
+
+		// Update
+		newDesc := "Updated description"
+		updated, err := client.UpdateEndpoint(ctx, endpoint.ID, hookbridge.UpdateEndpointRequest{
+			Description: &newDesc,
+		})
+		if err != nil {
+			t.Fatalf("UpdateEndpoint failed: %v", err)
+		}
+		if updated.ID != endpoint.ID || !updated.Updated {
+			t.Errorf("Expected update confirmation, got %+v", updated)
+		}
+
+		// Delete
+		err = client.DeleteEndpoint(ctx, endpoint.ID)
+		if err != nil {
+			t.Fatalf("DeleteEndpoint failed: %v", err)
+		}
+
+		// Verify deleted
+		_, err = client.GetEndpoint(ctx, endpoint.ID)
+		if err == nil {
+			t.Fatal("Expected error when getting deleted endpoint")
+		}
+		var notFoundErr *hookbridge.NotFoundError
+		if !errors.As(err, &notFoundErr) {
+			t.Errorf("Expected NotFoundError, got %T: %v", err, err)
+		}
+	})
+
+	t.Run("should list endpoints", func(t *testing.T) {
+		// Create a test endpoint
+		desc := "List test endpoint"
+		endpoint, err := client.CreateEndpoint(ctx, hookbridge.CreateEndpointRequest{
+			URL:         "https://example.com/webhooks/list-test",
+			Description: &desc,
+		})
+		if err != nil {
+			t.Fatalf("CreateEndpoint failed: %v", err)
+		}
+		defer func() {
+			_ = client.DeleteEndpoint(ctx, endpoint.ID)
+		}()
+
+		list, err := client.ListEndpoints(ctx, nil)
+		if err != nil {
+			t.Fatalf("ListEndpoints failed: %v", err)
+		}
+
+		found := false
+		for _, ep := range list.Endpoints {
+			if ep.ID == endpoint.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("Expected to find created endpoint in list")
+		}
+	})
+
+	t.Run("should rotate endpoint secret", func(t *testing.T) {
+		desc := "Rotate test endpoint"
+		endpoint, err := client.CreateEndpoint(ctx, hookbridge.CreateEndpointRequest{
+			URL:         "https://example.com/webhooks/rotate-test",
+			Description: &desc,
+		})
+		if err != nil {
+			t.Fatalf("CreateEndpoint failed: %v", err)
+		}
+		defer func() {
+			_ = client.DeleteEndpoint(ctx, endpoint.ID)
+		}()
+
+		originalSecret := endpoint.SigningSecret
+
+		rotated, err := client.RotateEndpointSecret(ctx, endpoint.ID)
+		if err != nil {
+			t.Fatalf("RotateEndpointSecret failed: %v", err)
+		}
+
+		if rotated.ID != endpoint.ID {
+			t.Errorf("Expected ID %s, got %s", endpoint.ID, rotated.ID)
+		}
+		if rotated.SigningSecret == "" {
+			t.Error("Expected new signing secret to be non-empty")
+		}
+		if rotated.SigningSecret == originalSecret {
+			t.Error("Expected signing secret to change after rotation")
 		}
 	})
 }
