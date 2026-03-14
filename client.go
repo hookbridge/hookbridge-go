@@ -19,7 +19,7 @@ const (
 	defaultSendURL = "https://send.hookbridge.io"
 	defaultTimeout = 30 * time.Second
 	defaultRetries = 3
-	userAgent      = "hookbridge-go/1.4.0"
+	userAgent      = "hookbridge-go/1.5.0"
 )
 
 // Client is the HookBridge API client.
@@ -122,6 +122,15 @@ func (c *Client) GetMessage(ctx context.Context, messageID string) (*Message, er
 		return nil, err
 	}
 	return &resp.Data, nil
+}
+
+// GetMessageAttempts retrieves delivery attempts for a message.
+func (c *Client) GetMessageAttempts(ctx context.Context, messageID string) (*AttemptsResponse, error) {
+	var resp apiResponse[[]AttemptRecord]
+	if err := c.do(ctx, http.MethodGet, "/v1/messages/"+messageID+"/attempts", nil, &resp); err != nil {
+		return nil, err
+	}
+	return &AttemptsResponse{Attempts: resp.Data, HasMore: resp.Meta.HasMore}, nil
 }
 
 // Replay replays a single outbound message.
@@ -542,6 +551,24 @@ func (c *Client) ResumeInboundEndpoint(ctx context.Context, endpointID string) (
 	return &resp.Data, nil
 }
 
+// GetInboundMessage retrieves an inbound message by ID.
+func (c *Client) GetInboundMessage(ctx context.Context, messageID string) (*InboundMessage, error) {
+	var resp apiResponse[InboundMessage]
+	if err := c.do(ctx, http.MethodGet, "/v1/inbound-messages/"+messageID, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// GetInboundMessageAttempts retrieves delivery attempts for an inbound message.
+func (c *Client) GetInboundMessageAttempts(ctx context.Context, messageID string) (*AttemptsResponse, error) {
+	var resp apiResponse[[]AttemptRecord]
+	if err := c.do(ctx, http.MethodGet, "/v1/inbound-messages/"+messageID+"/attempts", nil, &resp); err != nil {
+		return nil, err
+	}
+	return &AttemptsResponse{Attempts: resp.Data, HasMore: resp.Meta.HasMore}, nil
+}
+
 // ReplayInboundMessage replays a single inbound message.
 func (c *Client) ReplayInboundMessage(ctx context.Context, messageID string) (*ReplayBatchMessagesResponse, error) {
 	var resp ReplayBatchMessagesResponse
@@ -703,6 +730,12 @@ func (c *Client) DownloadExport(ctx context.Context, exportID string) (*Download
 		return nil, &NetworkError{Err: readErr}
 	}
 	return nil, c.parseErrorResponse(resp.StatusCode, body)
+}
+
+// DeleteExport deletes an export record.
+func (c *Client) DeleteExport(ctx context.Context, exportID string) error {
+	var resp apiResponse[struct{}]
+	return c.do(ctx, http.MethodDelete, "/v1/exports/"+exportID, nil, &resp)
 }
 
 func buildReplayAllQuery(req ReplayAllMessagesRequest, endpointKey string) string {

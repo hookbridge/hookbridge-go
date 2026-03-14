@@ -602,6 +602,60 @@ type InboundRejectionsResponse struct {
 	NextCursor *string
 }
 
+// AttemptRecord represents a single delivery attempt for a message.
+type AttemptRecord struct {
+	ID                    string     `json:"id"`
+	AttemptNo             int        `json:"attempt_no"`
+	CreatedAt             time.Time  `json:"created_at"`
+	ResponseStatus        *int       `json:"response_status,omitempty"`
+	ResponseLatencyMs     *int       `json:"response_latency_ms,omitempty"`
+	ProcessingMs          *int       `json:"processing_ms,omitempty"`
+	ErrorText             *string    `json:"error_text,omitempty"`
+	ResponseHeaders       *map[string]string `json:"response_headers,omitempty"`
+	RetryType             *string    `json:"retry_type,omitempty"`
+	RetryAfterSeconds     *int       `json:"retry_after_seconds,omitempty"`
+	ResolvedIP            *string    `json:"resolved_ip,omitempty"`
+	RequestHeaders        *map[string]string `json:"request_headers,omitempty"`
+	DnsMs                 *int       `json:"dns_ms,omitempty"`
+	TcpConnectMs          *int       `json:"tcp_connect_ms,omitempty"`
+	TlsHandshakeMs        *int       `json:"tls_handshake_ms,omitempty"`
+	TtfbMs                *int       `json:"ttfb_ms,omitempty"`
+	TransferMs            *int       `json:"transfer_ms,omitempty"`
+	ConnReused            *bool      `json:"conn_reused,omitempty"`
+	ResponseBodyURL       *string    `json:"response_body_url,omitempty"`
+	ResponseBodyTruncated *bool      `json:"response_body_truncated,omitempty"`
+}
+
+// AttemptsResponse represents a paginated list of delivery attempts.
+type AttemptsResponse struct {
+	Attempts []AttemptRecord
+	HasMore  bool
+}
+
+// InboundMessage represents a full inbound message.
+type InboundMessage struct {
+	ID                string        `json:"id"`
+	ProjectID         string        `json:"project_id"`
+	InboundEndpointID string        `json:"inbound_endpoint_id"`
+	Status            MessageStatus `json:"status"`
+	AttemptCount      int           `json:"attempt_count"`
+	ReplayCount       int           `json:"replay_count"`
+	ReceivedAt        time.Time     `json:"received_at"`
+	UpdatedAt         time.Time     `json:"updated_at"`
+	ContentType       *string       `json:"content_type,omitempty"`
+	SizeBytes         *int          `json:"size_bytes,omitempty"`
+	PayloadSHA256     *string       `json:"payload_sha256,omitempty"`
+	IdempotencyKey    *string       `json:"idempotency_key,omitempty"`
+	NextAttemptAt     *time.Time    `json:"next_attempt_at,omitempty"`
+	LastError         *string       `json:"last_error,omitempty"`
+	ResponseStatus    *int          `json:"response_status,omitempty"`
+	ResponseLatencyMs *int          `json:"response_latency_ms,omitempty"`
+	QueueWaitMs       *int          `json:"queue_wait_ms,omitempty"`
+	TotalDeliveryMs   *int          `json:"total_delivery_ms,omitempty"`
+	DeliveredAt       *time.Time    `json:"delivered_at,omitempty"`
+	FailedAt          *time.Time    `json:"failed_at,omitempty"`
+}
+
 // CreateExportRequest represents an export creation request.
 type CreateExportRequest struct {
 	StartTime  time.Time      `json:"start_time"`

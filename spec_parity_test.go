@@ -346,3 +346,200 @@ func TestSpecParityReplayMetricsAndInbound(t *testing.T) {
 		t.Fatalf("ListInboundRejections failed: %#v %v", rejections, err)
 	}
 }
+
+func TestSpecParityMessageControlsAndProjectBilling(t *testing.T) {
+	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/messages/m_1/replay":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"message_id":"m_1","status":"queued"},"meta":{"request_id":"req_1"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/messages/m_1/retry-now":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"m_1","project_id":"proj_1","endpoint_id":"ep_1","status":"pending_retry","attempt_count":2,"replay_count":0,"content_type":"application/json","size_bytes":128,"payload_sha256":"abc123","created_at":"2025-12-06T12:00:00Z","updated_at":"2025-12-06T12:00:01Z"},"meta":{"request_id":"req_2"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/messages/m_1/cancel":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"m_1","project_id":"proj_1","endpoint_id":"ep_1","status":"failed_permanent","attempt_count":2,"replay_count":0,"content_type":"application/json","size_bytes":128,"payload_sha256":"abc123","created_at":"2025-12-06T12:00:00Z","updated_at":"2025-12-06T12:00:02Z"},"meta":{"request_id":"req_3"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/dlq/replay/m_1":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"message_id":"m_1","status":"queued"},"meta":{"request_id":"req_4"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/projects/proj_1":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"proj_1","tenant_id":"tenant_1","name":"Main","status":"active","rate_limit_default":1000,"created_at":"2025-12-01T10:00:00Z"},"meta":{"request_id":"req_5"}}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/v1/projects/proj_1":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{},"meta":{"request_id":"req_6"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/endpoints/ep_1/signing-keys":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"sk_1","signing_secret":"whsec_new","key_hint":"abcd","created_at":"2025-12-06T12:10:00Z"},"meta":{"request_id":"req_7"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/billing/portal":
+			body := readJSONBody(t, r)
+			if body["return_url"] != "https://app.hookbridge.io/billing" {
+				t.Fatalf("unexpected portal payload %#v", body)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"portal_url":"https://billing.stripe.com/p/session/abc123"},"meta":{"request_id":"req_8"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/billing/subscription":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"plan":"starter","status":"active","limits":{"plan":"starter","messages_per_month":5000,"max_projects":3,"max_endpoints":25,"retention_days":30},"usage":{"messages_used":123,"period_start":"2026-02-01T00:00:00Z","period_end":"2026-02-28T23:59:59Z"},"cancel_at_period_end":false,"current_period_end":"2026-03-01T00:00:00Z"},"meta":{"request_id":"req_9"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/billing/invoices":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":[{"id":"in_1","status":"paid","amount_due":1000,"amount_paid":1000,"currency":"usd","period_start":"2026-02-05T00:00:00Z","period_end":"2026-03-05T00:00:00Z","created":"2026-03-05T06:00:00Z","lines":[{"description":"Starter Plan","amount":1000,"quantity":1}]}],"meta":{"request_id":"req_10","has_more":false}}`)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+	})
+
+	ctx := context.Background()
+
+	replayed, err := client.Replay(ctx, "m_1")
+	if err != nil || replayed.Status != hookbridge.StatusQueued {
+		t.Fatalf("Replay failed: %#v %v", replayed, err)
+	}
+
+	retried, err := client.RetryNow(ctx, "m_1")
+	if err != nil || retried.Status != hookbridge.StatusPendingRetry {
+		t.Fatalf("RetryNow failed: %#v %v", retried, err)
+	}
+
+	canceled, err := client.CancelRetry(ctx, "m_1")
+	if err != nil || canceled.Status != hookbridge.StatusFailedPermanent {
+		t.Fatalf("CancelRetry failed: %#v %v", canceled, err)
+	}
+
+	fromDLQ, err := client.ReplayFromDLQ(ctx, "m_1")
+	if err != nil || fromDLQ.MessageID != "m_1" {
+		t.Fatalf("ReplayFromDLQ failed: %#v %v", fromDLQ, err)
+	}
+
+	project, err := client.GetProject(ctx, "proj_1")
+	if err != nil || project.Name != "Main" {
+		t.Fatalf("GetProject failed: %#v %v", project, err)
+	}
+
+	if err := client.DeleteProject(ctx, "proj_1"); err != nil {
+		t.Fatalf("DeleteProject failed: %v", err)
+	}
+
+	signingKey, err := client.CreateEndpointSigningKey(ctx, "ep_1")
+	if err != nil || signingKey.SigningSecret != "whsec_new" {
+		t.Fatalf("CreateEndpointSigningKey failed: %#v %v", signingKey, err)
+	}
+
+	returnURL := "https://app.hookbridge.io/billing"
+	portal, err := client.CreatePortal(ctx, &hookbridge.CreatePortalRequest{ReturnURL: &returnURL})
+	if err != nil || portal.PortalURL != "https://billing.stripe.com/p/session/abc123" {
+		t.Fatalf("CreatePortal failed: %#v %v", portal, err)
+	}
+
+	subscription, err := client.GetSubscription(ctx)
+	if err != nil || subscription.Plan != "starter" || subscription.Usage.MessagesUsed != 123 {
+		t.Fatalf("GetSubscription failed: %#v %v", subscription, err)
+	}
+
+	invoices, err := client.GetInvoices(ctx)
+	if err != nil || len(invoices.Invoices) != 1 || invoices.Invoices[0].Lines[0].Quantity != 1 {
+		t.Fatalf("GetInvoices failed: %#v %v", invoices, err)
+	}
+}
+
+func TestSpecParityInboundManagementAndExports(t *testing.T) {
+	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/inbound-endpoints":
+			if r.URL.Query().Get("limit") != "10" {
+				t.Fatalf("unexpected inbound endpoint query: %s", r.URL.RawQuery)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":[{"id":"in_1","name":"Stripe","url":"https://example.com/inbound","active":true,"paused":false,"created_at":"2025-12-06T12:00:00Z"}],"meta":{"request_id":"req_1","has_more":false}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/inbound-endpoints/in_1":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"in_1","name":"Stripe","description":"Receives Stripe events","url":"https://example.com/inbound","active":true,"paused":false,"verify_static_token":false,"verify_hmac":true,"verify_ip_allowlist":false,"ingest_response_code":202,"idempotency_header_names":["stripe-signature"],"signing_enabled":true,"created_at":"2025-12-06T12:00:00Z","updated_at":"2025-12-06T12:05:00Z"},"meta":{"request_id":"req_2"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/inbound-endpoints/in_1/pause":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"in_1","paused":true},"meta":{"request_id":"req_3"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/inbound-endpoints/in_1/resume":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"in_1","paused":false},"meta":{"request_id":"req_4"}}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/v1/inbound-endpoints/in_1":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"in_1","deleted":true},"meta":{"request_id":"req_5"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/inbound-messages/inm_1/replay":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"message":"1 inbound message queued for replay","data":{"replayed":1,"failed":0,"stuck":0,"results":[{"message_id":"inm_1","status":"replayed"}]}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/inbound-messages/replay-batch":
+			body := readJSONBody(t, r)
+			if len(body["message_ids"].([]any)) != 2 {
+				t.Fatalf("unexpected replay batch body %#v", body)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"message":"2 inbound messages replayed","data":{"replayed":1,"failed":1,"stuck":0,"results":[{"message_id":"inm_1","status":"replayed"},{"message_id":"inm_2","status":"failed","error":"missing"}]}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/inbound-metrics":
+			if r.URL.Query().Get("window") != "24h" || r.URL.Query().Get("inbound_endpoint_id") != "in_1" {
+				t.Fatalf("unexpected inbound metrics query: %s", r.URL.RawQuery)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"window":"24h","total_messages":5000,"succeeded":4900,"failed":20,"retries":80,"success_rate":0.98,"avg_latency_ms":150,"avg_delivery_time_ms":3200},"meta":{"request_id":"req_8"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/exports":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":[{"id":"exp_1","project_id":"proj_1","status":"completed","filter_start_time":"2025-12-01T00:00:00Z","filter_end_time":"2025-12-06T23:59:59Z","row_count":125,"created_at":"2025-12-06T12:00:00Z"}],"meta":{"request_id":"req_9"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/exports/exp_1":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"exp_1","project_id":"proj_1","status":"completed","filter_start_time":"2025-12-01T00:00:00Z","filter_end_time":"2025-12-06T23:59:59Z","file_size_bytes":2048,"created_at":"2025-12-06T12:00:00Z"},"meta":{"request_id":"req_10"}}`)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+	})
+
+	ctx := context.Background()
+	limit := 10
+	listed, err := client.ListInboundEndpoints(ctx, &hookbridge.InboundEndpointsFilter{Limit: &limit})
+	if err != nil || len(listed.Endpoints) != 1 || listed.Endpoints[0].ID != "in_1" {
+		t.Fatalf("ListInboundEndpoints failed: %#v %v", listed, err)
+	}
+
+	inbound, err := client.GetInboundEndpoint(ctx, "in_1")
+	if err != nil || !inbound.VerifyHMAC {
+		t.Fatalf("GetInboundEndpoint failed: %#v %v", inbound, err)
+	}
+
+	paused, err := client.PauseInboundEndpoint(ctx, "in_1")
+	if err != nil || !paused.Paused {
+		t.Fatalf("PauseInboundEndpoint failed: %#v %v", paused, err)
+	}
+
+	resumed, err := client.ResumeInboundEndpoint(ctx, "in_1")
+	if err != nil || resumed.Paused {
+		t.Fatalf("ResumeInboundEndpoint failed: %#v %v", resumed, err)
+	}
+
+	deleted, err := client.DeleteInboundEndpoint(ctx, "in_1")
+	if err != nil || !deleted.Deleted {
+		t.Fatalf("DeleteInboundEndpoint failed: %#v %v", deleted, err)
+	}
+
+	replayed, err := client.ReplayInboundMessage(ctx, "inm_1")
+	if err != nil || replayed.Data.Replayed != 1 {
+		t.Fatalf("ReplayInboundMessage failed: %#v %v", replayed, err)
+	}
+
+	replayBatch, err := client.ReplayBatchInboundMessages(ctx, []string{"inm_1", "inm_2"})
+	if err != nil || replayBatch.Data.Results[1].Error == nil || *replayBatch.Data.Results[1].Error != "missing" {
+		t.Fatalf("ReplayBatchInboundMessages failed: %#v %v", replayBatch, err)
+	}
+
+	inboundID := "in_1"
+	metrics, err := client.GetInboundMetrics(ctx, hookbridge.Window24Hour, &inboundID)
+	if err != nil || metrics.AvgDeliveryTimeMs != 3200 {
+		t.Fatalf("GetInboundMetrics failed: %#v %v", metrics, err)
+	}
+
+	exports, err := client.ListExports(ctx)
+	if err != nil || len(exports) != 1 || exports[0].RowCount == nil || *exports[0].RowCount != 125 {
+		t.Fatalf("ListExports failed: %#v %v", exports, err)
+	}
+
+	exportRecord, err := client.GetExport(ctx, "exp_1")
+	if err != nil || exportRecord.FileSizeBytes == nil || *exportRecord.FileSizeBytes != 2048 {
+		t.Fatalf("GetExport failed: %#v %v", exportRecord, err)
+	}
+}
