@@ -230,6 +230,7 @@ type Endpoint struct {
 	RateLimitRPS *int               `json:"rate_limit_rps,omitempty"`
 	Burst        *int               `json:"burst,omitempty"`
 	Headers      *map[string]string `json:"headers,omitempty"`
+	Paused       bool               `json:"paused"`
 	CreatedAt    time.Time          `json:"created_at"`
 	UpdatedAt    time.Time          `json:"updated_at"`
 }
@@ -239,6 +240,7 @@ type EndpointSummary struct {
 	ID          string    `json:"id"`
 	URL         string    `json:"url"`
 	Description *string   `json:"description,omitempty"`
+	Paused      bool      `json:"paused"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -279,9 +281,10 @@ type UpdateResourceResponse struct {
 
 // ToggleResourceResponse indicates whether a resource state was changed.
 type ToggleResourceResponse struct {
-	ID      string `json:"id"`
-	Paused  bool   `json:"paused,omitempty"`
-	Deleted bool   `json:"deleted,omitempty"`
+	ID               string `json:"id"`
+	Paused           bool   `json:"paused,omitempty"`
+	Deleted          bool   `json:"deleted,omitempty"`
+	MessagesRequeued *int64 `json:"messages_requeued,omitempty"`
 }
 
 // ListEndpointsResponse represents the response from listing endpoints.

@@ -116,6 +116,52 @@ func TestSpecParityProjectsAndSigningKeys(t *testing.T) {
 	}
 }
 
+func TestSpecParityEndpointPauseState(t *testing.T) {
+	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/endpoints/ep_1":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"ep_1","url":"https://customer.app/webhooks","description":"Main production webhook","paused":false,"rate_limit_rps":10,"burst":20,"created_at":"2025-12-01T10:00:00Z","updated_at":"2025-12-06T12:00:00Z"},"meta":{"request_id":"req_1"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/endpoints":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":[{"id":"ep_1","url":"https://customer.app/webhooks","description":"Main production webhook","paused":false,"created_at":"2025-12-01T10:00:00Z"}],"meta":{"request_id":"req_2","has_more":false}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/endpoints/ep_1/pause":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"ep_1","paused":true},"meta":{"request_id":"req_3"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/endpoints/ep_1/resume":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"ep_1","paused":false,"messages_requeued":5},"meta":{"request_id":"req_4"}}`)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+	})
+
+	ctx := context.Background()
+
+	endpoint, err := client.GetEndpoint(ctx, "ep_1")
+	if err != nil || endpoint.Paused {
+		t.Fatalf("GetEndpoint failed: %#v %v", endpoint, err)
+	}
+
+	listed, err := client.ListEndpoints(ctx, nil)
+	if err != nil || len(listed.Endpoints) != 1 || listed.Endpoints[0].Paused {
+		t.Fatalf("ListEndpoints failed: %#v %v", listed, err)
+	}
+
+	paused, err := client.PauseEndpoint(ctx, "ep_1")
+	if err != nil || !paused.Paused {
+		t.Fatalf("PauseEndpoint failed: %#v %v", paused, err)
+	}
+
+	resumed, err := client.ResumeEndpoint(ctx, "ep_1")
+	if err != nil || resumed.Paused {
+		t.Fatalf("ResumeEndpoint failed: %#v %v", resumed, err)
+	}
+	if resumed.MessagesRequeued == nil || *resumed.MessagesRequeued != 5 {
+		t.Fatalf("expected messages requeued, got %#v", resumed)
+	}
+}
+
 func TestSpecParityBillingAndExports(t *testing.T) {
 	start := time.Date(2025, 12, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2025, 12, 6, 23, 59, 59, 0, time.UTC)

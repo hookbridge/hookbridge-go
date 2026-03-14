@@ -19,7 +19,7 @@ const (
 	defaultSendURL = "https://send.hookbridge.io"
 	defaultTimeout = 30 * time.Second
 	defaultRetries = 3
-	userAgent      = "hookbridge-go/1.3.0"
+	userAgent      = "hookbridge-go/1.4.0"
 )
 
 // Client is the HookBridge API client.
@@ -364,6 +364,24 @@ func (c *Client) UpdateEndpoint(ctx context.Context, endpointID string, req Upda
 func (c *Client) DeleteEndpoint(ctx context.Context, endpointID string) error {
 	var resp apiResponse[struct{}]
 	return c.do(ctx, http.MethodDelete, "/v1/endpoints/"+endpointID, nil, &resp)
+}
+
+// PauseEndpoint pauses an outbound endpoint.
+func (c *Client) PauseEndpoint(ctx context.Context, endpointID string) (*ToggleResourceResponse, error) {
+	var resp apiResponse[ToggleResourceResponse]
+	if err := c.do(ctx, http.MethodPost, "/v1/endpoints/"+endpointID+"/pause", nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// ResumeEndpoint resumes an outbound endpoint.
+func (c *Client) ResumeEndpoint(ctx context.Context, endpointID string) (*ToggleResourceResponse, error) {
+	var resp apiResponse[ToggleResourceResponse]
+	if err := c.do(ctx, http.MethodPost, "/v1/endpoints/"+endpointID+"/resume", nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
 }
 
 // CreateEndpointSigningKey creates a new signing key for an endpoint.
