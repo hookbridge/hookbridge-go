@@ -437,6 +437,7 @@ type InboundEndpoint struct {
 	Name                   string    `json:"name"`
 	Description            *string   `json:"description,omitempty"`
 	URL                    string    `json:"url"`
+	Mode                   string    `json:"mode"`
 	Active                 bool      `json:"active"`
 	Paused                 bool      `json:"paused"`
 	VerifyStaticToken      bool      `json:"verify_static_token"`
@@ -454,6 +455,7 @@ type InboundEndpointSummary struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	URL       string    `json:"url"`
+	Mode      string    `json:"mode"`
 	Active    bool      `json:"active"`
 	Paused    bool      `json:"paused"`
 	CreatedAt time.Time `json:"created_at"`
@@ -463,7 +465,8 @@ type InboundEndpointSummary struct {
 type CreateInboundEndpointRequest struct {
 	Name                   *string   `json:"name,omitempty"`
 	Description            *string   `json:"description,omitempty"`
-	URL                    string    `json:"url"`
+	Mode                   *string   `json:"mode,omitempty"`
+	URL                    *string   `json:"url,omitempty"`
 	VerifyStaticToken      *bool     `json:"verify_static_token,omitempty"`
 	TokenHeaderName        *string   `json:"token_header_name,omitempty"`
 	TokenQueryParam        *string   `json:"token_query_param,omitempty"`
@@ -485,6 +488,7 @@ type CreateInboundEndpointResponse struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	URL         string    `json:"url"`
+	Mode        string    `json:"mode"`
 	IngestURL   string    `json:"ingest_url"`
 	SecretToken string    `json:"secret_token"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -494,6 +498,7 @@ type CreateInboundEndpointResponse struct {
 type UpdateInboundEndpointRequest struct {
 	Name                   *string   `json:"name,omitempty"`
 	Description            *string   `json:"description,omitempty"`
+	Mode                   *string   `json:"mode,omitempty"`
 	URL                    *string   `json:"url,omitempty"`
 	VerifyStaticToken      *bool     `json:"verify_static_token,omitempty"`
 	TokenHeaderName        *string   `json:"token_header_name,omitempty"`
@@ -522,6 +527,29 @@ type ListInboundEndpointsResponse struct {
 type InboundEndpointsFilter struct {
 	Limit  *int
 	Cursor *string
+}
+
+// ListenFilter represents options for the listen polling endpoint.
+type ListenFilter struct {
+	After *string
+}
+
+// ListenMessage represents a single message from the listen endpoint.
+type ListenMessage struct {
+	MessageID    string            `json:"message_id"`
+	ContentType  string            `json:"content_type"`
+	Headers      map[string]string `json:"headers"`
+	SizeBytes    int               `json:"size_bytes"`
+	ReceivedAt   time.Time         `json:"received_at"`
+	Body         any               `json:"body,omitempty"`
+	BodyEncoding *string           `json:"body_encoding,omitempty"`
+	BodyError    *string           `json:"body_error,omitempty"`
+}
+
+// ListenInboundEndpointResponse represents the response from the listen polling endpoint.
+type ListenInboundEndpointResponse struct {
+	Messages   []ListenMessage
+	NextCursor *string
 }
 
 // InboundReplayAllRequest represents replay-all filters for inbound messages.
