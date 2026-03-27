@@ -307,9 +307,10 @@ func TestSpecParityReplayMetricsAndInbound(t *testing.T) {
 	}
 
 	name := "Stripe"
+	inboundURL := "https://example.com/inbound"
 	inbound, err := client.CreateInboundEndpoint(ctx, hookbridge.CreateInboundEndpointRequest{
 		Name: &name,
-		URL:  "https://example.com/inbound",
+		URL:  &inboundURL,
 	})
 	if err != nil || inbound.ID != "in_1" {
 		t.Fatalf("CreateInboundEndpoint failed: %#v %v", inbound, err)

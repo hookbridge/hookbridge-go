@@ -81,7 +81,7 @@ tokenHeaderName := "X-Webhook-Token"
 tokenValue := "my-shared-secret"
 
 inbound, _ := client.CreateInboundEndpoint(ctx, hookbridge.CreateInboundEndpointRequest{
-	URL:               "https://myapp.com/webhooks/inbound",
+	URL:               stringPtr("https://myapp.com/webhooks/inbound"),
 	Name:              stringPtr("Stripe inbound"),
 	VerifyStaticToken: boolPtr(true),
 	TokenHeaderName:   &tokenHeaderName,

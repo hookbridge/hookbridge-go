@@ -551,6 +551,21 @@ func (c *Client) ResumeInboundEndpoint(ctx context.Context, endpointID string) (
 	return &resp.Data, nil
 }
 
+// ListenInboundEndpoint polls for inbound messages on a cli-mode endpoint.
+func (c *Client) ListenInboundEndpoint(ctx context.Context, endpointID string, filter *ListenFilter) (*ListenInboundEndpointResponse, error) {
+	path := appendQuery("/v1/inbound-endpoints/"+endpointID+"/listen", func(query url.Values) {
+		if filter == nil {
+			return
+		}
+		setString(query, "after", filter.After)
+	})
+	var resp apiResponse[[]ListenMessage]
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &ListenInboundEndpointResponse{Messages: resp.Data, NextCursor: resp.Meta.NextCursor}, nil
+}
+
 // GetInboundMessage retrieves an inbound message by ID.
 func (c *Client) GetInboundMessage(ctx context.Context, messageID string) (*InboundMessage, error) {
 	var resp apiResponse[InboundMessage]
