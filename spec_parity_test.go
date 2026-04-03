@@ -162,6 +162,190 @@ func TestSpecParityEndpointPauseState(t *testing.T) {
 	}
 }
 
+func TestSpecParityPullEndpointsAndObservability(t *testing.T) {
+	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/pull-endpoints":
+			body := readJSONBody(t, r)
+			if body["name"] != "Stripe Pull" || body["retention_days"] != float64(14) {
+				t.Fatalf("unexpected pull create payload %#v", body)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"pull_1","name":"Stripe Pull","description":"Stores provider events for polling","mode":"pull","ingest_url":"https://ingest.hookbridge.io/pull/secret-token","secret_token":"secret-token","active":true,"paused":false,"retention_days":14,"event_type_source":"body","event_type_path":"type","verify_static_token":true,"token_header_name":"X-Webhook-Token","verify_hmac":false,"verify_ip_allowlist":false,"ingest_response_code":202,"idempotency_header_names":["X-Idempotency-Key"],"created_at":"2025-12-06T12:00:00Z","updated_at":"2025-12-06T12:00:00Z"},"meta":{"request_id":"req_1"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/pull-endpoints":
+			if r.URL.Query().Get("limit") != "10" {
+				t.Fatalf("unexpected pull endpoint query: %s", r.URL.RawQuery)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":[{"id":"pull_1","name":"Stripe Pull","active":true,"paused":false,"ingest_url":"https://ingest.hookbridge.io/pull","created_at":"2025-12-06T12:00:00Z"}],"meta":{"request_id":"req_2","has_more":false}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/pull-endpoints/pull_1":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"pull_1","name":"Stripe Pull","description":"Stores provider events for polling","mode":"pull","ingest_url":"https://ingest.hookbridge.io/pull","active":true,"paused":false,"retention_days":14,"event_type_source":"body","event_type_path":"type","counts":{"stored":1,"fetched":0,"delivered":0,"total":1},"verify_static_token":true,"token_header_name":"X-Webhook-Token","verify_hmac":false,"verify_ip_allowlist":false,"ingest_response_code":202,"idempotency_header_names":["X-Idempotency-Key"],"created_at":"2025-12-06T12:00:00Z","updated_at":"2025-12-06T12:05:00Z"},"meta":{"request_id":"req_3"}}`)
+		case r.Method == http.MethodPatch && r.URL.Path == "/v1/pull-endpoints/pull_1":
+			body := readJSONBody(t, r)
+			if body["name"] != "Stripe Pull Renamed" || body["retention_days"] != float64(21) {
+				t.Fatalf("unexpected pull update payload %#v", body)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"pull_1","name":"Stripe Pull Renamed","description":"Stores provider events for polling","mode":"pull","ingest_url":"https://ingest.hookbridge.io/pull","active":true,"paused":false,"retention_days":21,"event_type_source":"body","event_type_path":"type","counts":{"stored":1,"fetched":0,"delivered":0,"total":1},"verify_static_token":true,"token_header_name":"X-Webhook-Token","verify_hmac":false,"verify_ip_allowlist":false,"ingest_response_code":202,"idempotency_header_names":["X-Idempotency-Key"],"created_at":"2025-12-06T12:00:00Z","updated_at":"2025-12-06T12:10:00Z"},"meta":{"request_id":"req_4"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/pull-endpoints/pull_1/pause":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"pull_1","paused":true},"meta":{"request_id":"req_5"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/pull-endpoints/pull_1/resume":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"pull_1","paused":false},"meta":{"request_id":"req_6"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/pull-endpoints/pull_1/events":
+			if r.URL.Query().Get("status") != "stored" || r.URL.Query().Get("event_type") != "payment_intent.succeeded" {
+				t.Fatalf("unexpected pull events query: %s", r.URL.RawQuery)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":[{"id":"evt_1","event_type":"payment_intent.succeeded","status":"stored","size_bytes":256,"received_at":"2025-12-06T12:01:00Z","fetched_at":null}],"meta":{"request_id":"req_7","has_more":false,"next_cursor":""}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/pull-endpoints/pull_1/events/evt_1":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"evt_1","event_type":"payment_intent.succeeded","status":"fetched","content_type":"application/json","payload":{"type":"payment_intent.succeeded","id":"evt_123"},"headers":{"content-type":"application/json"},"size_bytes":256,"received_at":"2025-12-06T12:01:00Z","fetched_at":"2025-12-06T12:01:30Z"},"meta":{"request_id":"req_8"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/pull-endpoints/pull_1/events/ack":
+			body := readJSONBody(t, r)
+			items, ok := body["event_ids"].([]any)
+			if !ok || len(items) != 1 || items[0] != "evt_1" {
+				t.Fatalf("unexpected pull ack payload %#v", body)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"acknowledged":1},"meta":{"request_id":"req_9"}}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/v1/pull-endpoints/pull_1":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"id":"pull_1","deleted":true},"meta":{"request_id":"req_10"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/pull-logs":
+			if r.URL.Query().Get("pull_endpoint_id") != "pull_1" || r.URL.Query().Get("status") != "delivered" {
+				t.Fatalf("unexpected pull logs query: %s", r.URL.RawQuery)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":[{"event_id":"evt_1","pull_endpoint_id":"pull_1","endpoint_name":"Stripe Pull","event_type":"payment_intent.succeeded","status":"fetched","size_bytes":256,"received_at":"2025-12-06T12:01:00Z","fetched_at":"2025-12-06T12:01:30Z"}],"meta":{"request_id":"req_11","has_more":false}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/pull-metrics":
+			if r.URL.Query().Get("pull_endpoint_id") != "pull_1" || r.URL.Query().Get("window") != "24h" {
+				t.Fatalf("unexpected pull metrics query: %s", r.URL.RawQuery)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"window":"24h","total_messages":10,"succeeded":4,"failed":0,"retries":0,"success_rate":0.4,"avg_latency_ms":15},"meta":{"request_id":"req_12"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/pull-metrics/timeseries":
+			if r.URL.Query().Get("pull_endpoint_id") != "pull_1" || r.URL.Query().Get("window") != "24h" {
+				t.Fatalf("unexpected pull timeseries query: %s", r.URL.RawQuery)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":{"window":"24h","buckets":[{"timestamp":"2025-12-06T12:00:00Z","succeeded":4,"stored":4,"fetched":2,"total":10}]},"meta":{"request_id":"req_13"}}`)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+	})
+
+	ctx := context.Background()
+	name := "Stripe Pull"
+	description := "Stores provider events for polling"
+	retention := 14
+	eventTypeSource := "body"
+	eventTypePath := "type"
+	verifyStaticToken := true
+	tokenHeaderName := "X-Webhook-Token"
+	tokenValue := "secret-token-value"
+	idempotencyHeaders := []string{"X-Idempotency-Key"}
+	ingestResponseCode := 202
+
+	created, err := client.CreatePullEndpoint(ctx, hookbridge.CreatePullEndpointRequest{
+		Name:                   &name,
+		Description:            &description,
+		RetentionDays:          &retention,
+		EventTypeSource:        &eventTypeSource,
+		EventTypePath:          &eventTypePath,
+		VerifyStaticToken:      &verifyStaticToken,
+		TokenHeaderName:        &tokenHeaderName,
+		TokenValue:             &tokenValue,
+		IdempotencyHeaderNames: &idempotencyHeaders,
+		IngestResponseCode:     &ingestResponseCode,
+	})
+	if err != nil || created.ID != "pull_1" || created.SecretToken == nil || *created.SecretToken != "secret-token" {
+		t.Fatalf("CreatePullEndpoint failed: %#v %v", created, err)
+	}
+
+	limit := 10
+	listed, err := client.ListPullEndpoints(ctx, &hookbridge.PullEndpointsFilter{Limit: &limit})
+	if err != nil || len(listed.Endpoints) != 1 || listed.Endpoints[0].ID != "pull_1" {
+		t.Fatalf("ListPullEndpoints failed: %#v %v", listed, err)
+	}
+
+	fetched, err := client.GetPullEndpoint(ctx, "pull_1")
+	if err != nil || fetched.Counts == nil || fetched.Counts.Stored == nil || *fetched.Counts.Stored != 1 || fetched.Counts.Fetched == nil || *fetched.Counts.Fetched != 0 {
+		t.Fatalf("GetPullEndpoint failed: %#v %v", fetched, err)
+	}
+
+	updatedName := "Stripe Pull Renamed"
+	updatedRetention := 21
+	updated, err := client.UpdatePullEndpoint(ctx, "pull_1", hookbridge.UpdatePullEndpointRequest{
+		Name:          &updatedName,
+		RetentionDays: &updatedRetention,
+	})
+	if err != nil || updated.Name == nil || *updated.Name != "Stripe Pull Renamed" {
+		t.Fatalf("UpdatePullEndpoint failed: %#v %v", updated, err)
+	}
+
+	paused, err := client.PausePullEndpoint(ctx, "pull_1")
+	if err != nil || !paused.Paused {
+		t.Fatalf("PausePullEndpoint failed: %#v %v", paused, err)
+	}
+
+	resumed, err := client.ResumePullEndpoint(ctx, "pull_1")
+	if err != nil || resumed.Paused {
+		t.Fatalf("ResumePullEndpoint failed: %#v %v", resumed, err)
+	}
+
+	status := "stored"
+	eventType := "payment_intent.succeeded"
+	eventLimit := 5
+	events, err := client.ListPullEvents(ctx, "pull_1", &hookbridge.PullEventsFilter{
+		Status:    &status,
+		EventType: &eventType,
+		Limit:     &eventLimit,
+	})
+	if err != nil || len(events.Events) != 1 || events.Events[0].ID != "evt_1" {
+		t.Fatalf("ListPullEvents failed: %#v %v", events, err)
+	}
+
+	event, err := client.GetPullEvent(ctx, "pull_1", "evt_1")
+	if err != nil || event.ContentType != "application/json" || event.Status != "fetched" || event.FetchedAt == nil {
+		t.Fatalf("GetPullEvent failed: %#v %v", event, err)
+	}
+
+	acked, err := client.AckPullEvents(ctx, "pull_1", []string{"evt_1"})
+	if err != nil || acked.Acknowledged != 1 {
+		t.Fatalf("AckPullEvents failed: %#v %v", acked, err)
+	}
+
+	deleted, err := client.DeletePullEndpoint(ctx, "pull_1")
+	if err != nil || !deleted.Deleted {
+		t.Fatalf("DeletePullEndpoint failed: %#v %v", deleted, err)
+	}
+
+	delivered := "delivered"
+	logLimit := 10
+	logs, err := client.GetPullLogs(ctx, &hookbridge.PullLogsFilter{
+		PullEndpointID: &created.ID,
+		Status:         &delivered,
+		EventType:      &eventType,
+		Limit:          &logLimit,
+	})
+	if err != nil || len(logs.Entries) != 1 || logs.Entries[0].PullEndpointID != "pull_1" || logs.Entries[0].FetchedAt == nil {
+		t.Fatalf("GetPullLogs failed: %#v %v", logs, err)
+	}
+
+	metrics, err := client.GetPullMetrics(ctx, hookbridge.Window24Hour, &created.ID)
+	if err != nil || metrics.TotalMessages != 10 {
+		t.Fatalf("GetPullMetrics failed: %#v %v", metrics, err)
+	}
+
+	timeseries, err := client.GetPullTimeSeriesMetrics(ctx, hookbridge.Window24Hour, &created.ID)
+	if err != nil || len(timeseries.Buckets) != 1 || timeseries.Buckets[0].Total != 10 || timeseries.Buckets[0].Fetched != 2 {
+		t.Fatalf("GetPullTimeSeriesMetrics failed: %#v %v", timeseries, err)
+	}
+}
+
 func TestSpecParityBillingAndExports(t *testing.T) {
 	start := time.Date(2025, 12, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2025, 12, 6, 23, 59, 59, 0, time.UTC)

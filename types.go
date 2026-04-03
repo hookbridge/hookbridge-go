@@ -121,6 +121,21 @@ type TimeSeriesMetrics struct {
 	Buckets []TimeSeriesBucket `json:"buckets"`
 }
 
+// PullTimeSeriesBucket represents a pull metrics bucket.
+type PullTimeSeriesBucket struct {
+	Timestamp time.Time `json:"timestamp"`
+	Succeeded int       `json:"succeeded"`
+	Stored    int       `json:"stored"`
+	Fetched   int       `json:"fetched"`
+	Total     int       `json:"total"`
+}
+
+// PullTimeSeriesMetrics represents chartable pull-event metrics.
+type PullTimeSeriesMetrics struct {
+	Window  MetricsWindow          `json:"window"`
+	Buckets []PullTimeSeriesBucket `json:"buckets"`
+}
+
 // DLQMessage represents a message in the Dead Letter Queue.
 type DLQMessage struct {
 	MessageID    string `json:"message_id"`
@@ -285,6 +300,198 @@ type ToggleResourceResponse struct {
 	Paused           bool   `json:"paused,omitempty"`
 	Deleted          bool   `json:"deleted,omitempty"`
 	MessagesRequeued *int64 `json:"messages_requeued,omitempty"`
+}
+
+// PullEndpointCounts represents stored, fetched, and delivered event counts.
+type PullEndpointCounts struct {
+	Stored    *int `json:"stored,omitempty"`
+	Fetched   *int `json:"fetched,omitempty"`
+	Delivered *int `json:"delivered,omitempty"`
+	Total     *int `json:"total,omitempty"`
+}
+
+// PullEndpoint represents a full pull endpoint.
+type PullEndpoint struct {
+	ID                     string              `json:"id"`
+	Name                   *string             `json:"name,omitempty"`
+	Description            *string             `json:"description,omitempty"`
+	Mode                   string              `json:"mode"`
+	IngestURL              string              `json:"ingest_url"`
+	Active                 bool                `json:"active"`
+	Paused                 bool                `json:"paused"`
+	RetentionDays          *int                `json:"retention_days,omitempty"`
+	EventTypeSource        *string             `json:"event_type_source,omitempty"`
+	EventTypePath          *string             `json:"event_type_path,omitempty"`
+	Counts                 *PullEndpointCounts `json:"counts,omitempty"`
+	VerifyStaticToken      *bool               `json:"verify_static_token,omitempty"`
+	TokenHeaderName        *string             `json:"token_header_name,omitempty"`
+	TokenQueryParam        *string             `json:"token_query_param,omitempty"`
+	VerifyHMAC             *bool               `json:"verify_hmac,omitempty"`
+	HMACHeaderName         *string             `json:"hmac_header_name,omitempty"`
+	TimestampHeaderName    *string             `json:"timestamp_header_name,omitempty"`
+	TimestampTTLSeconds    *int                `json:"timestamp_ttl_seconds,omitempty"`
+	VerifyIPAllowlist      *bool               `json:"verify_ip_allowlist,omitempty"`
+	AllowedCIDRs           *[]string           `json:"allowed_cidrs,omitempty"`
+	IngestResponseCode     *int                `json:"ingest_response_code,omitempty"`
+	IdempotencyHeaderNames *[]string           `json:"idempotency_header_names,omitempty"`
+	CreatedAt              time.Time           `json:"created_at"`
+	UpdatedAt              time.Time           `json:"updated_at"`
+}
+
+// CreatePullEndpointRequest represents a request to create a pull endpoint.
+type CreatePullEndpointRequest struct {
+	Name                   *string   `json:"name,omitempty"`
+	Description            *string   `json:"description,omitempty"`
+	RetentionDays          *int      `json:"retention_days,omitempty"`
+	EventTypeSource        *string   `json:"event_type_source,omitempty"`
+	EventTypePath          *string   `json:"event_type_path,omitempty"`
+	VerifyStaticToken      *bool     `json:"verify_static_token,omitempty"`
+	TokenHeaderName        *string   `json:"token_header_name,omitempty"`
+	TokenQueryParam        *string   `json:"token_query_param,omitempty"`
+	TokenValue             *string   `json:"token_value,omitempty"`
+	VerifyHMAC             *bool     `json:"verify_hmac,omitempty"`
+	HMACHeaderName         *string   `json:"hmac_header_name,omitempty"`
+	HMACSecret             *string   `json:"hmac_secret,omitempty"`
+	TimestampHeaderName    *string   `json:"timestamp_header_name,omitempty"`
+	TimestampTTLSeconds    *int      `json:"timestamp_ttl_seconds,omitempty"`
+	VerifyIPAllowlist      *bool     `json:"verify_ip_allowlist,omitempty"`
+	AllowedCIDRs           *[]string `json:"allowed_cidrs,omitempty"`
+	IdempotencyHeaderNames *[]string `json:"idempotency_header_names,omitempty"`
+	IngestResponseCode     *int      `json:"ingest_response_code,omitempty"`
+}
+
+// CreatePullEndpointResponse represents the one-time pull endpoint creation payload.
+type CreatePullEndpointResponse struct {
+	PullEndpoint
+	SecretToken *string `json:"secret_token,omitempty"`
+}
+
+// UpdatePullEndpointRequest represents a request to update a pull endpoint.
+type UpdatePullEndpointRequest struct {
+	Name                   *string   `json:"name,omitempty"`
+	Description            *string   `json:"description,omitempty"`
+	RetentionDays          *int      `json:"retention_days,omitempty"`
+	EventTypeSource        *string   `json:"event_type_source,omitempty"`
+	EventTypePath          *string   `json:"event_type_path,omitempty"`
+	VerifyStaticToken      *bool     `json:"verify_static_token,omitempty"`
+	TokenHeaderName        *string   `json:"token_header_name,omitempty"`
+	TokenQueryParam        *string   `json:"token_query_param,omitempty"`
+	TokenValue             *string   `json:"token_value,omitempty"`
+	VerifyHMAC             *bool     `json:"verify_hmac,omitempty"`
+	HMACHeaderName         *string   `json:"hmac_header_name,omitempty"`
+	HMACSecret             *string   `json:"hmac_secret,omitempty"`
+	TimestampHeaderName    *string   `json:"timestamp_header_name,omitempty"`
+	TimestampTTLSeconds    *int      `json:"timestamp_ttl_seconds,omitempty"`
+	VerifyIPAllowlist      *bool     `json:"verify_ip_allowlist,omitempty"`
+	AllowedCIDRs           *[]string `json:"allowed_cidrs,omitempty"`
+	IdempotencyHeaderNames *[]string `json:"idempotency_header_names,omitempty"`
+	IngestResponseCode     *int      `json:"ingest_response_code,omitempty"`
+}
+
+// PullEndpointSummary represents a summary pull endpoint.
+type PullEndpointSummary struct {
+	ID        string    `json:"id"`
+	Name      *string   `json:"name,omitempty"`
+	Active    bool      `json:"active"`
+	Paused    bool      `json:"paused"`
+	IngestURL string    `json:"ingest_url"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ListPullEndpointsResponse represents paginated pull endpoints.
+type ListPullEndpointsResponse struct {
+	Endpoints  []PullEndpointSummary
+	HasMore    bool
+	NextCursor *string
+}
+
+// PullEndpointsFilter represents pull endpoint list filters.
+type PullEndpointsFilter struct {
+	Limit  *int
+	Cursor *string
+}
+
+// PullEventsFilter represents filters for listing pull events.
+type PullEventsFilter struct {
+	Status    *string
+	EventType *string
+	Since     *time.Time
+	Before    *time.Time
+	Limit     *int
+	Cursor    *string
+}
+
+// PullEventSummary represents a pull event without payload.
+type PullEventSummary struct {
+	ID          string     `json:"id"`
+	EventType   *string    `json:"event_type,omitempty"`
+	Status      string     `json:"status"`
+	SizeBytes   int        `json:"size_bytes"`
+	ReceivedAt  time.Time  `json:"received_at"`
+	FetchedAt   *time.Time `json:"fetched_at,omitempty"`
+	DeliveredAt *time.Time `json:"delivered_at,omitempty"`
+}
+
+// PullEventDetail represents a pull event including payload.
+type PullEventDetail struct {
+	ID          string             `json:"id"`
+	EventType   *string            `json:"event_type,omitempty"`
+	Status      string             `json:"status"`
+	ContentType string             `json:"content_type"`
+	Payload     any                `json:"payload"`
+	Headers     *map[string]string `json:"headers,omitempty"`
+	SizeBytes   int                `json:"size_bytes"`
+	ReceivedAt  time.Time          `json:"received_at"`
+	FetchedAt   *time.Time         `json:"fetched_at,omitempty"`
+	DeliveredAt *time.Time         `json:"delivered_at,omitempty"`
+}
+
+// ListPullEventsResponse represents paginated pull events.
+type ListPullEventsResponse struct {
+	Events     []PullEventSummary
+	HasMore    bool
+	NextCursor *string
+}
+
+// AckPullEventsRequest acknowledges pull events.
+type AckPullEventsRequest struct {
+	EventIDs []string `json:"event_ids"`
+}
+
+// AckPullEventsResponse represents pull event acknowledgement counts.
+type AckPullEventsResponse struct {
+	Acknowledged int `json:"acknowledged"`
+}
+
+// PullLogsFilter represents filters for pull logs.
+type PullLogsFilter struct {
+	PullEndpointID *string
+	Status         *string
+	EventType      *string
+	StartTime      *time.Time
+	EndTime        *time.Time
+	Limit          *int
+	Cursor         *string
+}
+
+// PullLogEntry represents a single pull log entry.
+type PullLogEntry struct {
+	EventID        string     `json:"event_id"`
+	PullEndpointID string     `json:"pull_endpoint_id"`
+	EndpointName   *string    `json:"endpoint_name,omitempty"`
+	EventType      *string    `json:"event_type,omitempty"`
+	Status         string     `json:"status"`
+	SizeBytes      int        `json:"size_bytes"`
+	ReceivedAt     time.Time  `json:"received_at"`
+	FetchedAt      *time.Time `json:"fetched_at,omitempty"`
+	DeliveredAt    *time.Time `json:"delivered_at,omitempty"`
+}
+
+// PullLogsResponse represents paginated pull logs.
+type PullLogsResponse struct {
+	Entries    []PullLogEntry
+	HasMore    bool
+	NextCursor *string
 }
 
 // ListEndpointsResponse represents the response from listing endpoints.
@@ -632,26 +839,26 @@ type InboundRejectionsResponse struct {
 
 // AttemptRecord represents a single delivery attempt for a message.
 type AttemptRecord struct {
-	ID                    string     `json:"id"`
-	AttemptNo             int        `json:"attempt_no"`
-	CreatedAt             time.Time  `json:"created_at"`
-	ResponseStatus        *int       `json:"response_status,omitempty"`
-	ResponseLatencyMs     *int       `json:"response_latency_ms,omitempty"`
-	ProcessingMs          *int       `json:"processing_ms,omitempty"`
-	ErrorText             *string    `json:"error_text,omitempty"`
+	ID                    string             `json:"id"`
+	AttemptNo             int                `json:"attempt_no"`
+	CreatedAt             time.Time          `json:"created_at"`
+	ResponseStatus        *int               `json:"response_status,omitempty"`
+	ResponseLatencyMs     *int               `json:"response_latency_ms,omitempty"`
+	ProcessingMs          *int               `json:"processing_ms,omitempty"`
+	ErrorText             *string            `json:"error_text,omitempty"`
 	ResponseHeaders       *map[string]string `json:"response_headers,omitempty"`
-	RetryType             *string    `json:"retry_type,omitempty"`
-	RetryAfterSeconds     *int       `json:"retry_after_seconds,omitempty"`
-	ResolvedIP            *string    `json:"resolved_ip,omitempty"`
+	RetryType             *string            `json:"retry_type,omitempty"`
+	RetryAfterSeconds     *int               `json:"retry_after_seconds,omitempty"`
+	ResolvedIP            *string            `json:"resolved_ip,omitempty"`
 	RequestHeaders        *map[string]string `json:"request_headers,omitempty"`
-	DnsMs                 *int       `json:"dns_ms,omitempty"`
-	TcpConnectMs          *int       `json:"tcp_connect_ms,omitempty"`
-	TlsHandshakeMs        *int       `json:"tls_handshake_ms,omitempty"`
-	TtfbMs                *int       `json:"ttfb_ms,omitempty"`
-	TransferMs            *int       `json:"transfer_ms,omitempty"`
-	ConnReused            *bool      `json:"conn_reused,omitempty"`
-	ResponseBodyURL       *string    `json:"response_body_url,omitempty"`
-	ResponseBodyTruncated *bool      `json:"response_body_truncated,omitempty"`
+	DnsMs                 *int               `json:"dns_ms,omitempty"`
+	TcpConnectMs          *int               `json:"tcp_connect_ms,omitempty"`
+	TlsHandshakeMs        *int               `json:"tls_handshake_ms,omitempty"`
+	TtfbMs                *int               `json:"ttfb_ms,omitempty"`
+	TransferMs            *int               `json:"transfer_ms,omitempty"`
+	ConnReused            *bool              `json:"conn_reused,omitempty"`
+	ResponseBodyURL       *string            `json:"response_body_url,omitempty"`
+	ResponseBodyTruncated *bool              `json:"response_body_truncated,omitempty"`
 }
 
 // AttemptsResponse represents a paginated list of delivery attempts.

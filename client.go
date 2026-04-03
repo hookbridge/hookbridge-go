@@ -422,6 +422,163 @@ func (c *Client) RotateEndpointSecret(ctx context.Context, endpointID string) (*
 	return c.CreateEndpointSigningKey(ctx, endpointID)
 }
 
+// CreatePullEndpoint creates a new pull endpoint.
+func (c *Client) CreatePullEndpoint(ctx context.Context, req CreatePullEndpointRequest) (*CreatePullEndpointResponse, error) {
+	var resp apiResponse[CreatePullEndpointResponse]
+	if err := c.do(ctx, http.MethodPost, "/v1/pull-endpoints", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// ListPullEndpoints lists pull endpoints.
+func (c *Client) ListPullEndpoints(ctx context.Context, filter *PullEndpointsFilter) (*ListPullEndpointsResponse, error) {
+	path := appendQuery("/v1/pull-endpoints", func(query url.Values) {
+		if filter == nil {
+			return
+		}
+		setInt(query, "limit", filter.Limit)
+		setString(query, "cursor", filter.Cursor)
+	})
+	var resp apiResponse[[]PullEndpointSummary]
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &ListPullEndpointsResponse{Endpoints: resp.Data, HasMore: resp.Meta.HasMore, NextCursor: resp.Meta.NextCursor}, nil
+}
+
+// GetPullEndpoint retrieves a pull endpoint.
+func (c *Client) GetPullEndpoint(ctx context.Context, endpointID string) (*PullEndpoint, error) {
+	var resp apiResponse[PullEndpoint]
+	if err := c.do(ctx, http.MethodGet, "/v1/pull-endpoints/"+endpointID, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// UpdatePullEndpoint updates a pull endpoint.
+func (c *Client) UpdatePullEndpoint(ctx context.Context, endpointID string, req UpdatePullEndpointRequest) (*PullEndpoint, error) {
+	var resp apiResponse[PullEndpoint]
+	if err := c.do(ctx, http.MethodPatch, "/v1/pull-endpoints/"+endpointID, req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// DeletePullEndpoint deletes a pull endpoint.
+func (c *Client) DeletePullEndpoint(ctx context.Context, endpointID string) (*ToggleResourceResponse, error) {
+	var resp apiResponse[ToggleResourceResponse]
+	if err := c.do(ctx, http.MethodDelete, "/v1/pull-endpoints/"+endpointID, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// PausePullEndpoint pauses a pull endpoint.
+func (c *Client) PausePullEndpoint(ctx context.Context, endpointID string) (*ToggleResourceResponse, error) {
+	var resp apiResponse[ToggleResourceResponse]
+	if err := c.do(ctx, http.MethodPost, "/v1/pull-endpoints/"+endpointID+"/pause", nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// ResumePullEndpoint resumes a pull endpoint.
+func (c *Client) ResumePullEndpoint(ctx context.Context, endpointID string) (*ToggleResourceResponse, error) {
+	var resp apiResponse[ToggleResourceResponse]
+	if err := c.do(ctx, http.MethodPost, "/v1/pull-endpoints/"+endpointID+"/resume", nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// ListPullEvents lists events for a pull endpoint.
+func (c *Client) ListPullEvents(ctx context.Context, endpointID string, filter *PullEventsFilter) (*ListPullEventsResponse, error) {
+	path := appendQuery("/v1/pull-endpoints/"+endpointID+"/events", func(query url.Values) {
+		if filter == nil {
+			return
+		}
+		setString(query, "status", filter.Status)
+		setString(query, "event_type", filter.EventType)
+		if filter.Since != nil {
+			query.Set("since", filter.Since.Format(time.RFC3339))
+		}
+		if filter.Before != nil {
+			query.Set("before", filter.Before.Format(time.RFC3339))
+		}
+		setInt(query, "limit", filter.Limit)
+		setString(query, "cursor", filter.Cursor)
+	})
+	var resp apiResponse[[]PullEventSummary]
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &ListPullEventsResponse{Events: resp.Data, HasMore: resp.Meta.HasMore, NextCursor: resp.Meta.NextCursor}, nil
+}
+
+// GetPullEvent retrieves a pull event including payload.
+func (c *Client) GetPullEvent(ctx context.Context, endpointID, eventID string) (*PullEventDetail, error) {
+	var resp apiResponse[PullEventDetail]
+	if err := c.do(ctx, http.MethodGet, "/v1/pull-endpoints/"+endpointID+"/events/"+eventID, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// AckPullEvents acknowledges pull events as delivered.
+func (c *Client) AckPullEvents(ctx context.Context, endpointID string, eventIDs []string) (*AckPullEventsResponse, error) {
+	var resp apiResponse[AckPullEventsResponse]
+	if err := c.do(ctx, http.MethodPost, "/v1/pull-endpoints/"+endpointID+"/events/ack", AckPullEventsRequest{EventIDs: eventIDs}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// GetPullLogs retrieves pull logs.
+func (c *Client) GetPullLogs(ctx context.Context, filter *PullLogsFilter) (*PullLogsResponse, error) {
+	path := appendQuery("/v1/pull-logs", func(query url.Values) {
+		if filter == nil {
+			return
+		}
+		setString(query, "pull_endpoint_id", filter.PullEndpointID)
+		setString(query, "status", filter.Status)
+		setString(query, "event_type", filter.EventType)
+		if filter.StartTime != nil {
+			query.Set("start_time", filter.StartTime.Format(time.RFC3339))
+		}
+		if filter.EndTime != nil {
+			query.Set("end_time", filter.EndTime.Format(time.RFC3339))
+		}
+		setInt(query, "limit", filter.Limit)
+		setString(query, "cursor", filter.Cursor)
+	})
+	var resp apiResponse[[]PullLogEntry]
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &PullLogsResponse{Entries: resp.Data, HasMore: resp.Meta.HasMore, NextCursor: resp.Meta.NextCursor}, nil
+}
+
+// GetPullMetrics retrieves aggregated pull metrics.
+func (c *Client) GetPullMetrics(ctx context.Context, window MetricsWindow, pullEndpointID *string) (*Metrics, error) {
+	path := buildWindowPath("/v1/pull-metrics", window, pullEndpointID, "pull_endpoint_id")
+	var resp apiResponse[Metrics]
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// GetPullTimeSeriesMetrics retrieves chartable pull metrics.
+func (c *Client) GetPullTimeSeriesMetrics(ctx context.Context, window MetricsWindow, pullEndpointID *string) (*PullTimeSeriesMetrics, error) {
+	path := buildWindowPath("/v1/pull-metrics/timeseries", window, pullEndpointID, "pull_endpoint_id")
+	var resp apiResponse[PullTimeSeriesMetrics]
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
 // CreateCheckout creates a Stripe checkout session.
 func (c *Client) CreateCheckout(ctx context.Context, req CreateCheckoutRequest) (*CheckoutSession, error) {
 	var resp apiResponse[CheckoutSession]
