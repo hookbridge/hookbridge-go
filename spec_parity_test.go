@@ -202,7 +202,11 @@ func TestSpecParityPullEndpointsAndObservability(t *testing.T) {
 			io.WriteString(w, `{"data":[{"id":"evt_1","event_type":"payment_intent.succeeded","status":"stored","size_bytes":256,"received_at":"2025-12-06T12:01:00Z","fetched_at":null}],"meta":{"request_id":"req_7","has_more":false,"next_cursor":""}}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/pull-endpoints/pull_1/events/evt_1":
 			w.Header().Set("Content-Type", "application/json")
-			io.WriteString(w, `{"data":{"id":"evt_1","event_type":"payment_intent.succeeded","status":"fetched","content_type":"application/json","payload":{"type":"payment_intent.succeeded","id":"evt_123"},"headers":{"content-type":"application/json"},"size_bytes":256,"received_at":"2025-12-06T12:01:00Z","fetched_at":"2025-12-06T12:01:30Z"},"meta":{"request_id":"req_8"}}`)
+			if r.URL.Query().Get("preview") == "true" {
+				io.WriteString(w, `{"data":{"id":"evt_1","event_type":"payment_intent.succeeded","status":"stored","content_type":"application/json","payload":{"type":"payment_intent.succeeded","id":"evt_123"},"headers":{"content-type":"application/json"},"size_bytes":256,"received_at":"2025-12-06T12:01:00Z","timing":{"ingest_processing_ms":12}},"meta":{"request_id":"req_8p"}}`)
+			} else {
+				io.WriteString(w, `{"data":{"id":"evt_1","event_type":"payment_intent.succeeded","status":"fetched","content_type":"application/json","payload":{"type":"payment_intent.succeeded","id":"evt_123"},"headers":{"content-type":"application/json"},"size_bytes":256,"received_at":"2025-12-06T12:01:00Z","fetched_at":"2025-12-06T12:01:30Z","timing":{"ingest_processing_ms":12,"time_to_fetch_ms":30000}},"meta":{"request_id":"req_8"}}`)
+			}
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/pull-endpoints/pull_1/events/ack":
 			body := readJSONBody(t, r)
 			items, ok := body["event_ids"].([]any)
@@ -219,7 +223,7 @@ func TestSpecParityPullEndpointsAndObservability(t *testing.T) {
 				t.Fatalf("unexpected pull logs query: %s", r.URL.RawQuery)
 			}
 			w.Header().Set("Content-Type", "application/json")
-			io.WriteString(w, `{"data":[{"event_id":"evt_1","pull_endpoint_id":"pull_1","endpoint_name":"Stripe Pull","event_type":"payment_intent.succeeded","status":"fetched","size_bytes":256,"received_at":"2025-12-06T12:01:00Z","fetched_at":"2025-12-06T12:01:30Z"}],"meta":{"request_id":"req_11","has_more":false}}`)
+			io.WriteString(w, `{"data":[{"event_id":"evt_1","pull_endpoint_id":"pull_1","endpoint_name":"Stripe Pull","event_type":"payment_intent.succeeded","status":"fetched","size_bytes":256,"received_at":"2025-12-06T12:01:00Z","fetched_at":"2025-12-06T12:01:30Z","timing":{"ingest_processing_ms":12,"time_to_fetch_ms":30000}}],"meta":{"request_id":"req_11","has_more":false}}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/pull-metrics":
 			if r.URL.Query().Get("pull_endpoint_id") != "pull_1" || r.URL.Query().Get("window") != "24h" {
 				t.Fatalf("unexpected pull metrics query: %s", r.URL.RawQuery)
@@ -308,9 +312,17 @@ func TestSpecParityPullEndpointsAndObservability(t *testing.T) {
 		t.Fatalf("ListPullEvents failed: %#v %v", events, err)
 	}
 
-	event, err := client.GetPullEvent(ctx, "pull_1", "evt_1")
+	preview, err := client.GetPullEvent(ctx, "pull_1", "evt_1", true)
+	if err != nil || preview.Status != "stored" || preview.Timing == nil || preview.Timing.IngestProcessingMs == nil || *preview.Timing.IngestProcessingMs != 12 {
+		t.Fatalf("GetPullEvent preview failed: %#v %v", preview, err)
+	}
+
+	event, err := client.GetPullEvent(ctx, "pull_1", "evt_1", false)
 	if err != nil || event.ContentType != "application/json" || event.Status != "fetched" || event.FetchedAt == nil {
 		t.Fatalf("GetPullEvent failed: %#v %v", event, err)
+	}
+	if event.Timing == nil || event.Timing.TimeToFetchMs == nil || *event.Timing.TimeToFetchMs != 30000 {
+		t.Fatalf("GetPullEvent timing failed: %#v", event.Timing)
 	}
 
 	acked, err := client.AckPullEvents(ctx, "pull_1", []string{"evt_1"})
@@ -333,6 +345,9 @@ func TestSpecParityPullEndpointsAndObservability(t *testing.T) {
 	})
 	if err != nil || len(logs.Entries) != 1 || logs.Entries[0].PullEndpointID != "pull_1" || logs.Entries[0].FetchedAt == nil {
 		t.Fatalf("GetPullLogs failed: %#v %v", logs, err)
+	}
+	if logs.Entries[0].Timing == nil || logs.Entries[0].Timing.IngestProcessingMs == nil || *logs.Entries[0].Timing.IngestProcessingMs != 12 {
+		t.Fatalf("GetPullLogs timing failed: %#v", logs.Entries[0].Timing)
 	}
 
 	metrics, err := client.GetPullMetrics(ctx, hookbridge.Window24Hour, &created.ID)
@@ -645,6 +660,15 @@ func TestSpecParityInboundManagementAndExports(t *testing.T) {
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/inbound-endpoints/in_1/resume":
 			w.Header().Set("Content-Type", "application/json")
 			io.WriteString(w, `{"data":{"id":"in_1","paused":false},"meta":{"request_id":"req_4"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/inbound-endpoints/in_1/signing-keys":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			io.WriteString(w, `{"data":{"id":"sk_inbound_1","signing_secret":"whsec_inbound123456789","key_hint":"6789"},"meta":{"request_id":"req_sk1"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/inbound-endpoints/in_1/signing-keys":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":[{"id":"sk_inbound_1","key_hint":"6789","created_at":"2025-12-06T12:10:00Z"},{"id":"sk_inbound_2","key_hint":"abcd","created_at":"2025-12-06T12:00:00Z"}],"meta":{"request_id":"req_sk2"}}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/v1/inbound-endpoints/in_1/signing-keys/sk_inbound_1":
+			w.WriteHeader(http.StatusNoContent)
 		case r.Method == http.MethodDelete && r.URL.Path == "/v1/inbound-endpoints/in_1":
 			w.Header().Set("Content-Type", "application/json")
 			io.WriteString(w, `{"data":{"id":"in_1","deleted":true},"meta":{"request_id":"req_5"}}`)
@@ -697,6 +721,20 @@ func TestSpecParityInboundManagementAndExports(t *testing.T) {
 		t.Fatalf("ResumeInboundEndpoint failed: %#v %v", resumed, err)
 	}
 
+	signingKey, err := client.CreateInboundSigningKey(ctx, "in_1")
+	if err != nil || signingKey.ID != "sk_inbound_1" || signingKey.SigningSecret != "whsec_inbound123456789" {
+		t.Fatalf("CreateInboundSigningKey failed: %#v %v", signingKey, err)
+	}
+
+	signingKeys, err := client.ListInboundSigningKeys(ctx, "in_1")
+	if err != nil || len(signingKeys) != 2 || signingKeys[0].ID != "sk_inbound_1" {
+		t.Fatalf("ListInboundSigningKeys failed: %#v %v", signingKeys, err)
+	}
+
+	if err := client.DeleteInboundSigningKey(ctx, "in_1", "sk_inbound_1"); err != nil {
+		t.Fatalf("DeleteInboundSigningKey failed: %v", err)
+	}
+
 	deleted, err := client.DeleteInboundEndpoint(ctx, "in_1")
 	if err != nil || !deleted.Deleted {
 		t.Fatalf("DeleteInboundEndpoint failed: %#v %v", deleted, err)
@@ -726,5 +764,108 @@ func TestSpecParityInboundManagementAndExports(t *testing.T) {
 	exportRecord, err := client.GetExport(ctx, "exp_1")
 	if err != nil || exportRecord.FileSizeBytes == nil || *exportRecord.FileSizeBytes != 2048 {
 		t.Fatalf("GetExport failed: %#v %v", exportRecord, err)
+	}
+}
+
+func TestSpecParityDeleteMessagesAndActors(t *testing.T) {
+	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodDelete && r.URL.Path == "/v1/messages/m_1":
+			io.WriteString(w, `{"data":{"message_id":"m_1","deleted_at":"2026-04-05T14:23:11.123Z","already_deleted":false},"meta":{"request_id":"req_1"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/messages/delete-batch":
+			body := readJSONBody(t, r)
+			ids, _ := body["message_ids"].([]any)
+			if len(ids) != 2 {
+				t.Fatalf("expected 2 ids, got %#v", body)
+			}
+			io.WriteString(w, `{"data":{"results":[{"message_id":"m_1","outcome":"deleted","deleted_at":"2026-04-05T14:23:11.123Z"},{"message_id":"m_2","outcome":"not_found"}],"deleted_count":1,"already_deleted_count":0,"not_found_count":1},"meta":{"request_id":"req_2"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/messages/delete-all":
+			if r.URL.Query().Get("status") != "succeeded" || r.URL.Query().Get("limit") != "500" {
+				t.Fatalf("unexpected delete-all query: %s", r.URL.RawQuery)
+			}
+			io.WriteString(w, `{"data":{"deleted":2,"deleted_message_ids":["m_1","m_2"]},"meta":{"request_id":"req_3"}}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/v1/inbound-messages/inm_1":
+			io.WriteString(w, `{"data":{"message_id":"inm_1","deleted_at":"2026-04-05T14:23:11.123Z","already_deleted":true},"meta":{"request_id":"req_4"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/inbound-messages/delete-batch":
+			io.WriteString(w, `{"data":{"results":[{"message_id":"inm_1","outcome":"deleted","deleted_at":"2026-04-05T14:23:11.123Z"}],"deleted_count":1,"already_deleted_count":0,"not_found_count":0},"meta":{"request_id":"req_5"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/inbound-messages/delete-all":
+			if r.URL.Query().Get("inbound_endpoint_id") != "in_1" {
+				t.Fatalf("unexpected inbound delete-all query: %s", r.URL.RawQuery)
+			}
+			io.WriteString(w, `{"data":{"deleted":0,"deleted_message_ids":[]},"meta":{"request_id":"req_6"}}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/v1/pull-endpoints/pe_1/events/ev_1":
+			io.WriteString(w, `{"data":{"event_id":"ev_1","deleted_at":"2026-04-05T14:23:11.123Z","already_deleted":false},"meta":{"request_id":"req_7"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/pull-endpoints/pe_1/events/delete-batch":
+			io.WriteString(w, `{"data":{"results":[{"event_id":"ev_1","outcome":"deleted","deleted_at":"2026-04-05T14:23:11.123Z"}],"deleted_count":1,"already_deleted_count":0,"not_found_count":0},"meta":{"request_id":"req_8"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/pull-endpoints/pe_1/events/delete-all":
+			if r.URL.Query().Get("event_type") != "user.created" {
+				t.Fatalf("unexpected pull delete-all query: %s", r.URL.RawQuery)
+			}
+			io.WriteString(w, `{"data":{"deleted":3,"deleted_event_ids":["ev_1","ev_2","ev_3"]},"meta":{"request_id":"req_9"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/actors/lookup":
+			if r.URL.Query().Get("user_id") != "user_1,user_2" || r.URL.Query().Get("api_key_id") != "key_1" {
+				t.Fatalf("unexpected actor lookup query: %s", r.URL.RawQuery)
+			}
+			io.WriteString(w, `{"data":{"users":{"user_1":{"email":"alice@example.com"},"user_2":{"email":"bob@example.com"}},"api_keys":{"key_1":{"label":"Production"}}},"meta":{"request_id":"req_10"}}`)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+	})
+
+	ctx := context.Background()
+
+	del, err := client.DeleteMessage(ctx, "m_1")
+	if err != nil || del.MessageID != "m_1" || del.AlreadyDeleted {
+		t.Fatalf("DeleteMessage failed: %#v %v", del, err)
+	}
+
+	batch, err := client.DeleteMessagesBatch(ctx, []string{"m_1", "m_2"})
+	if err != nil || batch.DeletedCount != 1 || batch.NotFoundCount != 1 || batch.Results[0].Outcome != hookbridge.DeleteOutcomeDeleted {
+		t.Fatalf("DeleteMessagesBatch failed: %#v %v", batch, err)
+	}
+
+	status := "succeeded"
+	limit := 500
+	all, err := client.DeleteMessagesAll(ctx, hookbridge.DeleteMessagesAllRequest{Status: &status, Limit: &limit})
+	if err != nil || all.Deleted != 2 || len(all.DeletedMessageIDs) != 2 {
+		t.Fatalf("DeleteMessagesAll failed: %#v %v", all, err)
+	}
+
+	inDel, err := client.DeleteInboundMessage(ctx, "inm_1")
+	if err != nil || !inDel.AlreadyDeleted {
+		t.Fatalf("DeleteInboundMessage failed: %#v %v", inDel, err)
+	}
+
+	inBatch, err := client.DeleteInboundMessagesBatch(ctx, []string{"inm_1"})
+	if err != nil || inBatch.DeletedCount != 1 {
+		t.Fatalf("DeleteInboundMessagesBatch failed: %#v %v", inBatch, err)
+	}
+
+	inboundID := "in_1"
+	inAll, err := client.DeleteInboundMessagesAll(ctx, hookbridge.DeleteInboundMessagesAllRequest{InboundEndpointID: &inboundID})
+	if err != nil || inAll.Deleted != 0 {
+		t.Fatalf("DeleteInboundMessagesAll failed: %#v %v", inAll, err)
+	}
+
+	pDel, err := client.DeletePullEvent(ctx, "pe_1", "ev_1")
+	if err != nil || pDel.EventID != "ev_1" {
+		t.Fatalf("DeletePullEvent failed: %#v %v", pDel, err)
+	}
+
+	pBatch, err := client.DeletePullEventsBatch(ctx, "pe_1", []string{"ev_1"})
+	if err != nil || pBatch.DeletedCount != 1 {
+		t.Fatalf("DeletePullEventsBatch failed: %#v %v", pBatch, err)
+	}
+
+	eventType := "user.created"
+	pAll, err := client.DeletePullEventsAll(ctx, "pe_1", hookbridge.DeletePullEventsAllRequest{EventType: &eventType})
+	if err != nil || pAll.Deleted != 3 || len(pAll.DeletedEventIDs) != 3 {
+		t.Fatalf("DeletePullEventsAll failed: %#v %v", pAll, err)
+	}
+
+	actors, err := client.LookupActors(ctx, hookbridge.ActorLookupRequest{UserIDs: []string{"user_1", "user_2"}, APIKeyIDs: []string{"key_1"}})
+	if err != nil || actors.Users["user_1"].Email != "alice@example.com" || actors.APIKeys["key_1"].Label != "Production" {
+		t.Fatalf("LookupActors failed: %#v %v", actors, err)
 	}
 }

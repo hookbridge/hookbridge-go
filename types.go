@@ -63,6 +63,9 @@ type Message struct {
 	LastError         *string       `json:"last_error,omitempty"`
 	ResponseStatus    *int          `json:"response_status,omitempty"`
 	ResponseLatencyMs *int          `json:"response_latency_ms,omitempty"`
+	DeletedAt         *time.Time    `json:"deleted_at,omitempty"`
+	DeletedByUserID   *string       `json:"deleted_by_user_id,omitempty"`
+	DeletedByAPIKeyID *string       `json:"deleted_by_api_key_id,omitempty"`
 }
 
 // MessageSummary represents a summary of a message for log listings.
@@ -76,6 +79,7 @@ type MessageSummary struct {
 	ResponseStatus    *int          `json:"response_status,omitempty"`
 	ResponseLatencyMs *int          `json:"response_latency_ms,omitempty"`
 	LastError         *string       `json:"last_error,omitempty"`
+	DeletedAt         *string       `json:"deleted_at,omitempty"`
 }
 
 // LogsResponse represents the response from querying logs.
@@ -421,29 +425,43 @@ type PullEventsFilter struct {
 	Cursor    *string
 }
 
+// PullTimingBreakdown represents timing metrics for a pull event lifecycle.
+type PullTimingBreakdown struct {
+	IngestProcessingMs *int `json:"ingest_processing_ms,omitempty"`
+	TimeToFetchMs      *int `json:"time_to_fetch_ms,omitempty"`
+	TimeToAckMs        *int `json:"time_to_ack_ms,omitempty"`
+	TotalLifecycleMs   *int `json:"total_lifecycle_ms,omitempty"`
+}
+
 // PullEventSummary represents a pull event without payload.
 type PullEventSummary struct {
-	ID          string     `json:"id"`
-	EventType   *string    `json:"event_type,omitempty"`
-	Status      string     `json:"status"`
-	SizeBytes   int        `json:"size_bytes"`
-	ReceivedAt  time.Time  `json:"received_at"`
-	FetchedAt   *time.Time `json:"fetched_at,omitempty"`
-	DeliveredAt *time.Time `json:"delivered_at,omitempty"`
+	ID          string               `json:"id"`
+	EventType   *string              `json:"event_type,omitempty"`
+	Status      string               `json:"status"`
+	SizeBytes   int                  `json:"size_bytes"`
+	ReceivedAt  time.Time            `json:"received_at"`
+	FetchedAt   *time.Time           `json:"fetched_at,omitempty"`
+	DeliveredAt *time.Time           `json:"delivered_at,omitempty"`
+	Timing      *PullTimingBreakdown `json:"timing,omitempty"`
+	DeletedAt   *time.Time           `json:"deleted_at,omitempty"`
 }
 
 // PullEventDetail represents a pull event including payload.
 type PullEventDetail struct {
-	ID          string             `json:"id"`
-	EventType   *string            `json:"event_type,omitempty"`
-	Status      string             `json:"status"`
-	ContentType string             `json:"content_type"`
-	Payload     any                `json:"payload"`
-	Headers     *map[string]string `json:"headers,omitempty"`
-	SizeBytes   int                `json:"size_bytes"`
-	ReceivedAt  time.Time          `json:"received_at"`
-	FetchedAt   *time.Time         `json:"fetched_at,omitempty"`
-	DeliveredAt *time.Time         `json:"delivered_at,omitempty"`
+	ID                string               `json:"id"`
+	EventType         *string              `json:"event_type,omitempty"`
+	Status            string               `json:"status"`
+	ContentType       string               `json:"content_type"`
+	Payload           any                  `json:"payload"`
+	Headers           *map[string]string   `json:"headers,omitempty"`
+	SizeBytes         int                  `json:"size_bytes"`
+	ReceivedAt        time.Time            `json:"received_at"`
+	FetchedAt         *time.Time           `json:"fetched_at,omitempty"`
+	DeliveredAt       *time.Time           `json:"delivered_at,omitempty"`
+	Timing            *PullTimingBreakdown `json:"timing,omitempty"`
+	DeletedAt         *time.Time           `json:"deleted_at,omitempty"`
+	DeletedByUserID   *string              `json:"deleted_by_user_id,omitempty"`
+	DeletedByAPIKeyID *string              `json:"deleted_by_api_key_id,omitempty"`
 }
 
 // ListPullEventsResponse represents paginated pull events.
@@ -476,15 +494,16 @@ type PullLogsFilter struct {
 
 // PullLogEntry represents a single pull log entry.
 type PullLogEntry struct {
-	EventID        string     `json:"event_id"`
-	PullEndpointID string     `json:"pull_endpoint_id"`
-	EndpointName   *string    `json:"endpoint_name,omitempty"`
-	EventType      *string    `json:"event_type,omitempty"`
-	Status         string     `json:"status"`
-	SizeBytes      int        `json:"size_bytes"`
-	ReceivedAt     time.Time  `json:"received_at"`
-	FetchedAt      *time.Time `json:"fetched_at,omitempty"`
-	DeliveredAt    *time.Time `json:"delivered_at,omitempty"`
+	EventID        string               `json:"event_id"`
+	PullEndpointID string               `json:"pull_endpoint_id"`
+	EndpointName   *string              `json:"endpoint_name,omitempty"`
+	EventType      *string              `json:"event_type,omitempty"`
+	Status         string               `json:"status"`
+	SizeBytes      int                  `json:"size_bytes"`
+	ReceivedAt     time.Time            `json:"received_at"`
+	FetchedAt      *time.Time           `json:"fetched_at,omitempty"`
+	DeliveredAt    *time.Time           `json:"delivered_at,omitempty"`
+	Timing         *PullTimingBreakdown `json:"timing,omitempty"`
 }
 
 // PullLogsResponse represents paginated pull logs.
@@ -692,13 +711,16 @@ type CreateInboundEndpointRequest struct {
 
 // CreateInboundEndpointResponse represents the one-time inbound endpoint creation payload.
 type CreateInboundEndpointResponse struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	URL         string    `json:"url"`
-	Mode        string    `json:"mode"`
-	IngestURL   string    `json:"ingest_url"`
-	SecretToken string    `json:"secret_token"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	URL           string    `json:"url"`
+	Mode          string    `json:"mode"`
+	IngestURL     string    `json:"ingest_url"`
+	SecretToken   string    `json:"secret_token"`
+	SigningKeyID  *string   `json:"signing_key_id,omitempty"`
+	SigningSecret *string   `json:"signing_secret,omitempty"`
+	KeyHint       *string   `json:"key_hint,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // UpdateInboundEndpointRequest represents a request to update an inbound endpoint.
@@ -789,6 +811,7 @@ type InboundLogEntry struct {
 	ResponseLatencyMs *int          `json:"response_latency_ms,omitempty"`
 	LastError         *string       `json:"last_error,omitempty"`
 	TotalDeliveryMs   *int          `json:"total_delivery_ms,omitempty"`
+	DeletedAt         *time.Time    `json:"deleted_at,omitempty"`
 }
 
 // InboundLogsResponse represents paginated inbound logs.
@@ -889,6 +912,9 @@ type InboundMessage struct {
 	TotalDeliveryMs   *int          `json:"total_delivery_ms,omitempty"`
 	DeliveredAt       *time.Time    `json:"delivered_at,omitempty"`
 	FailedAt          *time.Time    `json:"failed_at,omitempty"`
+	DeletedAt         *time.Time    `json:"deleted_at,omitempty"`
+	DeletedByUserID   *string       `json:"deleted_by_user_id,omitempty"`
+	DeletedByAPIKeyID *string       `json:"deleted_by_api_key_id,omitempty"`
 }
 
 // CreateExportRequest represents an export creation request.
@@ -947,4 +973,131 @@ type dlqDataResponse struct {
 	Messages   []DLQMessage `json:"messages"`
 	HasMore    bool         `json:"has_more"`
 	NextCursor *string      `json:"next_cursor,omitempty"`
+}
+
+// DeleteOutcome represents the outcome of a single delete in a batch request.
+type DeleteOutcome string
+
+const (
+	DeleteOutcomeDeleted        DeleteOutcome = "deleted"
+	DeleteOutcomeAlreadyDeleted DeleteOutcome = "already_deleted"
+	DeleteOutcomeNotFound       DeleteOutcome = "not_found"
+)
+
+// DeleteMessageResult represents the result of deleting a single message.
+type DeleteMessageResult struct {
+	MessageID      string    `json:"message_id"`
+	DeletedAt      time.Time `json:"deleted_at"`
+	AlreadyDeleted bool      `json:"already_deleted"`
+}
+
+// DeleteEventResult represents the result of deleting a single pull event.
+type DeleteEventResult struct {
+	EventID        string    `json:"event_id"`
+	DeletedAt      time.Time `json:"deleted_at"`
+	AlreadyDeleted bool      `json:"already_deleted"`
+}
+
+// DeleteBatchRequest represents a batch delete request.
+type DeleteBatchRequest struct {
+	MessageIDs []string `json:"message_ids"`
+}
+
+// DeleteBatchItem represents a single per-ID outcome in a batch response.
+type DeleteBatchItem struct {
+	MessageID string        `json:"message_id"`
+	Outcome   DeleteOutcome `json:"outcome"`
+	DeletedAt *time.Time    `json:"deleted_at,omitempty"`
+}
+
+// DeleteBatchResponse represents the response to a batch delete of messages.
+type DeleteBatchResponse struct {
+	Results             []DeleteBatchItem `json:"results"`
+	DeletedCount        int               `json:"deleted_count"`
+	AlreadyDeletedCount int               `json:"already_deleted_count"`
+	NotFoundCount       int               `json:"not_found_count"`
+}
+
+// DeleteEventBatchItem represents a per-ID outcome for pull event batch delete.
+type DeleteEventBatchItem struct {
+	EventID   string        `json:"event_id"`
+	Outcome   DeleteOutcome `json:"outcome"`
+	DeletedAt *time.Time    `json:"deleted_at,omitempty"`
+}
+
+// DeleteEventBatchResponse represents the response to a batch delete of pull events.
+type DeleteEventBatchResponse struct {
+	Results             []DeleteEventBatchItem `json:"results"`
+	DeletedCount        int                    `json:"deleted_count"`
+	AlreadyDeletedCount int                    `json:"already_deleted_count"`
+	NotFoundCount       int                    `json:"not_found_count"`
+}
+
+// DeletePartialError describes a partial-failure error from a delete-all response.
+type DeletePartialError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// DeleteAllResponse represents the response to a delete-all of outbound or inbound messages.
+type DeleteAllResponse struct {
+	Deleted           int                 `json:"deleted"`
+	DeletedMessageIDs []string            `json:"deleted_message_ids"`
+	Error             *DeletePartialError `json:"error,omitempty"`
+}
+
+// DeletePullEventsAllResponse represents the response to a delete-all of pull events.
+type DeletePullEventsAllResponse struct {
+	Deleted         int                 `json:"deleted"`
+	DeletedEventIDs []string            `json:"deleted_event_ids"`
+	Error           *DeletePartialError `json:"error,omitempty"`
+}
+
+// DeleteMessagesAllRequest represents filter options for /v1/messages/delete-all.
+type DeleteMessagesAllRequest struct {
+	Status        *string
+	EndpointID    *string
+	CreatedAfter  *time.Time
+	CreatedBefore *time.Time
+	Limit         *int
+}
+
+// DeleteInboundMessagesAllRequest represents filter options for /v1/inbound-messages/delete-all.
+type DeleteInboundMessagesAllRequest struct {
+	Status            *string
+	InboundEndpointID *string
+	ReceivedAfter     *time.Time
+	ReceivedBefore    *time.Time
+	Limit             *int
+}
+
+// DeletePullEventsAllRequest represents filter options for /v1/pull-endpoints/{id}/events/delete-all.
+type DeletePullEventsAllRequest struct {
+	Status         *string
+	EventType      *string
+	ReceivedAfter  *time.Time
+	ReceivedBefore *time.Time
+	Limit          *int
+}
+
+// ActorLookupRequest represents the parameters for /v1/actors/lookup.
+type ActorLookupRequest struct {
+	UserIDs   []string
+	APIKeyIDs []string
+}
+
+// ActorUser represents a resolved user identity.
+type ActorUser struct {
+	Email string `json:"email"`
+}
+
+// ActorAPIKey represents a resolved API key display name.
+type ActorAPIKey struct {
+	Label string `json:"label"`
+}
+
+// ActorLookupResponse represents the response from /v1/actors/lookup.
+type ActorLookupResponse struct {
+	Users   map[string]ActorUser   `json:"users,omitempty"`
+	APIKeys map[string]ActorAPIKey `json:"api_keys,omitempty"`
 }

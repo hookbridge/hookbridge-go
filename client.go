@@ -517,9 +517,14 @@ func (c *Client) ListPullEvents(ctx context.Context, endpointID string, filter *
 }
 
 // GetPullEvent retrieves a pull event including payload.
-func (c *Client) GetPullEvent(ctx context.Context, endpointID, eventID string) (*PullEventDetail, error) {
+// If preview is true, the payload is returned without transitioning the status to fetched.
+func (c *Client) GetPullEvent(ctx context.Context, endpointID, eventID string, preview bool) (*PullEventDetail, error) {
+	path := "/v1/pull-endpoints/" + endpointID + "/events/" + eventID
+	if preview {
+		path += "?preview=true"
+	}
 	var resp apiResponse[PullEventDetail]
-	if err := c.do(ctx, http.MethodGet, "/v1/pull-endpoints/"+endpointID+"/events/"+eventID, nil, &resp); err != nil {
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Data, nil
@@ -706,6 +711,30 @@ func (c *Client) ResumeInboundEndpoint(ctx context.Context, endpointID string) (
 		return nil, err
 	}
 	return &resp.Data, nil
+}
+
+// CreateInboundSigningKey creates a new delivery signing key for an inbound endpoint.
+func (c *Client) CreateInboundSigningKey(ctx context.Context, endpointID string) (*RotateSecretResponse, error) {
+	var resp apiResponse[RotateSecretResponse]
+	if err := c.do(ctx, http.MethodPost, "/v1/inbound-endpoints/"+endpointID+"/signing-keys", nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// ListInboundSigningKeys lists the signing keys for an inbound endpoint.
+func (c *Client) ListInboundSigningKeys(ctx context.Context, endpointID string) ([]SigningKey, error) {
+	var resp apiResponse[[]SigningKey]
+	if err := c.do(ctx, http.MethodGet, "/v1/inbound-endpoints/"+endpointID+"/signing-keys", nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+// DeleteInboundSigningKey deletes a signing key from an inbound endpoint.
+func (c *Client) DeleteInboundSigningKey(ctx context.Context, endpointID, keyID string) error {
+	var resp apiResponse[struct{}]
+	return c.do(ctx, http.MethodDelete, "/v1/inbound-endpoints/"+endpointID+"/signing-keys/"+keyID, nil, &resp)
 }
 
 // ListenInboundEndpoint polls for inbound messages on a cli-mode endpoint.
@@ -910,6 +939,128 @@ func (c *Client) DeleteExport(ctx context.Context, exportID string) error {
 	return c.do(ctx, http.MethodDelete, "/v1/exports/"+exportID, nil, &resp)
 }
 
+// DeleteMessage soft-deletes an outbound message. Idempotent: already-deleted
+// messages return a successful response with AlreadyDeleted=true.
+func (c *Client) DeleteMessage(ctx context.Context, messageID string) (*DeleteMessageResult, error) {
+	var resp apiResponse[DeleteMessageResult]
+	if err := c.do(ctx, http.MethodDelete, "/v1/messages/"+messageID, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// DeleteMessagesBatch soft-deletes a batch of outbound messages by ID (max 100).
+func (c *Client) DeleteMessagesBatch(ctx context.Context, messageIDs []string) (*DeleteBatchResponse, error) {
+	var resp apiResponse[DeleteBatchResponse]
+	if err := c.do(ctx, http.MethodPost, "/v1/messages/delete-batch", DeleteBatchRequest{MessageIDs: messageIDs}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// DeleteMessagesAll soft-deletes outbound messages matching the filters (max 1000 per call).
+func (c *Client) DeleteMessagesAll(ctx context.Context, req DeleteMessagesAllRequest) (*DeleteAllResponse, error) {
+	path := appendQuery("/v1/messages/delete-all", func(query url.Values) {
+		setString(query, "status", req.Status)
+		setString(query, "endpoint_id", req.EndpointID)
+		setTime(query, "created_after", req.CreatedAfter)
+		setTime(query, "created_before", req.CreatedBefore)
+		setInt(query, "limit", req.Limit)
+	})
+	var resp deleteAllEnvelope
+	if err := c.do(ctx, http.MethodPost, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &DeleteAllResponse{Deleted: resp.Data.Deleted, DeletedMessageIDs: resp.Data.DeletedMessageIDs, Error: resp.Error}, nil
+}
+
+// DeleteInboundMessage soft-deletes an inbound message.
+func (c *Client) DeleteInboundMessage(ctx context.Context, messageID string) (*DeleteMessageResult, error) {
+	var resp apiResponse[DeleteMessageResult]
+	if err := c.do(ctx, http.MethodDelete, "/v1/inbound-messages/"+messageID, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// DeleteInboundMessagesBatch soft-deletes a batch of inbound messages (max 100).
+func (c *Client) DeleteInboundMessagesBatch(ctx context.Context, messageIDs []string) (*DeleteBatchResponse, error) {
+	var resp apiResponse[DeleteBatchResponse]
+	if err := c.do(ctx, http.MethodPost, "/v1/inbound-messages/delete-batch", DeleteBatchRequest{MessageIDs: messageIDs}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// DeleteInboundMessagesAll soft-deletes inbound messages matching the filters (max 1000).
+func (c *Client) DeleteInboundMessagesAll(ctx context.Context, req DeleteInboundMessagesAllRequest) (*DeleteAllResponse, error) {
+	path := appendQuery("/v1/inbound-messages/delete-all", func(query url.Values) {
+		setString(query, "status", req.Status)
+		setString(query, "inbound_endpoint_id", req.InboundEndpointID)
+		setTime(query, "received_after", req.ReceivedAfter)
+		setTime(query, "received_before", req.ReceivedBefore)
+		setInt(query, "limit", req.Limit)
+	})
+	var resp deleteAllEnvelope
+	if err := c.do(ctx, http.MethodPost, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &DeleteAllResponse{Deleted: resp.Data.Deleted, DeletedMessageIDs: resp.Data.DeletedMessageIDs, Error: resp.Error}, nil
+}
+
+// DeletePullEvent soft-deletes a single pull event.
+func (c *Client) DeletePullEvent(ctx context.Context, endpointID, eventID string) (*DeleteEventResult, error) {
+	var resp apiResponse[DeleteEventResult]
+	if err := c.do(ctx, http.MethodDelete, "/v1/pull-endpoints/"+endpointID+"/events/"+eventID, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// DeletePullEventsBatch soft-deletes a batch of pull events by ID (max 100).
+// The request body uses `message_ids` per the shared schema; each entry is a pull event ID.
+func (c *Client) DeletePullEventsBatch(ctx context.Context, endpointID string, eventIDs []string) (*DeleteEventBatchResponse, error) {
+	var resp apiResponse[DeleteEventBatchResponse]
+	if err := c.do(ctx, http.MethodPost, "/v1/pull-endpoints/"+endpointID+"/events/delete-batch", DeleteBatchRequest{MessageIDs: eventIDs}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// DeletePullEventsAll soft-deletes pull events matching the filters (max 1000).
+func (c *Client) DeletePullEventsAll(ctx context.Context, endpointID string, req DeletePullEventsAllRequest) (*DeletePullEventsAllResponse, error) {
+	path := appendQuery("/v1/pull-endpoints/"+endpointID+"/events/delete-all", func(query url.Values) {
+		setString(query, "status", req.Status)
+		setString(query, "event_type", req.EventType)
+		setTime(query, "received_after", req.ReceivedAfter)
+		setTime(query, "received_before", req.ReceivedBefore)
+		setInt(query, "limit", req.Limit)
+	})
+	var resp pullDeleteAllEnvelope
+	if err := c.do(ctx, http.MethodPost, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &DeletePullEventsAllResponse{Deleted: resp.Data.Deleted, DeletedEventIDs: resp.Data.DeletedEventIDs, Error: resp.Error}, nil
+}
+
+// LookupActors resolves user IDs and/or API key IDs to display names (email or label).
+// At least one of UserIDs or APIKeyIDs must be provided.
+func (c *Client) LookupActors(ctx context.Context, req ActorLookupRequest) (*ActorLookupResponse, error) {
+	path := appendQuery("/v1/actors/lookup", func(query url.Values) {
+		if len(req.UserIDs) > 0 {
+			query.Set("user_id", strings.Join(req.UserIDs, ","))
+		}
+		if len(req.APIKeyIDs) > 0 {
+			query.Set("api_key_id", strings.Join(req.APIKeyIDs, ","))
+		}
+	})
+	var resp apiResponse[ActorLookupResponse]
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
 func buildReplayAllQuery(req ReplayAllMessagesRequest, endpointKey string) string {
 	query := url.Values{}
 	query.Set("status", string(req.Status))
@@ -946,6 +1097,28 @@ func setInt(query url.Values, key string, value *int) {
 	if value != nil {
 		query.Set(key, strconv.Itoa(*value))
 	}
+}
+
+func setTime(query url.Values, key string, value *time.Time) {
+	if value != nil {
+		query.Set(key, value.Format(time.RFC3339))
+	}
+}
+
+type deleteAllEnvelope struct {
+	Data struct {
+		Deleted           int      `json:"deleted"`
+		DeletedMessageIDs []string `json:"deleted_message_ids"`
+	} `json:"data"`
+	Error *DeletePartialError `json:"error,omitempty"`
+}
+
+type pullDeleteAllEnvelope struct {
+	Data struct {
+		Deleted         int      `json:"deleted"`
+		DeletedEventIDs []string `json:"deleted_event_ids"`
+	} `json:"data"`
+	Error *DeletePartialError `json:"error,omitempty"`
 }
 
 // doSend performs an HTTP request to the send URL with retries.
