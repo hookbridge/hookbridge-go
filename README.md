@@ -5,7 +5,7 @@ Official Go SDK for HookBridge. Send webhooks with guaranteed delivery, automati
 ## Installation
 
 ```bash
-go get github.com/hookbridge/hookbridge-go
+go get github.com/hookbridge/hookbridge-go/v2
 ```
 
 ## Quick Start
@@ -17,7 +17,7 @@ import (
 	"context"
 	"fmt"
 
-	hookbridge "github.com/hookbridge/hookbridge-go"
+	hookbridge "github.com/hookbridge/hookbridge-go/v2"
 )
 
 func main() {

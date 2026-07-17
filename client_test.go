@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
-	"github.com/hookbridge/hookbridge-go"
+	"github.com/hookbridge/hookbridge-go/v2"
 )
 
 // Test configuration from environment variables
@@ -47,6 +48,23 @@ func newTestClient(t *testing.T) *hookbridge.Client {
 		t.Fatalf("Failed to create client: %v", err)
 	}
 	return client
+}
+
+// TestSessionOnlyMethodsRemoved verifies the session-cookie-only console
+// methods (which always 401 against an app API key) were removed, while the
+// API-key-compatible billing methods remain.
+func TestSessionOnlyMethodsRemoved(t *testing.T) {
+	c := &hookbridge.Client{}
+	for _, name := range []string{"ListProjects", "CreateProject", "GetProject", "UpdateProject", "DeleteProject", "CreateCheckout", "CreatePortal"} {
+		if _, ok := reflect.TypeOf(c).MethodByName(name); ok {
+			t.Errorf("%s should have been removed", name)
+		}
+	}
+	for _, name := range []string{"GetSubscription", "GetUsageHistory", "GetInvoices"} {
+		if _, ok := reflect.TypeOf(c).MethodByName(name); !ok {
+			t.Errorf("%s must still exist", name)
+		}
+	}
 }
 
 // TestClientConfiguration tests client creation and configuration

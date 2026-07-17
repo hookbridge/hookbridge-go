@@ -541,50 +541,6 @@ type RotateSecretResponse struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
-// Project represents a project.
-type Project struct {
-	ID               string    `json:"id"`
-	TenantID         string    `json:"tenant_id"`
-	Name             string    `json:"name"`
-	Status           string    `json:"status"`
-	RateLimitDefault int       `json:"rate_limit_default"`
-	CreatedAt        time.Time `json:"created_at"`
-}
-
-// CreateProjectRequest represents a request to create a project.
-type CreateProjectRequest struct {
-	Name             string `json:"name"`
-	RateLimitDefault *int   `json:"rate_limit_default,omitempty"`
-}
-
-// UpdateProjectRequest represents a request to update a project.
-type UpdateProjectRequest struct {
-	Name             *string `json:"name,omitempty"`
-	RateLimitDefault *int    `json:"rate_limit_default,omitempty"`
-}
-
-// CreateCheckoutRequest represents a billing checkout request.
-type CreateCheckoutRequest struct {
-	Plan     string `json:"plan"`
-	Interval string `json:"interval"`
-}
-
-// CheckoutSession represents a checkout session response.
-type CheckoutSession struct {
-	SessionID   string `json:"session_id"`
-	CheckoutURL string `json:"checkout_url"`
-}
-
-// CreatePortalRequest represents a billing portal request.
-type CreatePortalRequest struct {
-	ReturnURL *string `json:"return_url,omitempty"`
-}
-
-// PortalSession represents a customer portal session response.
-type PortalSession struct {
-	PortalURL string `json:"portal_url"`
-}
-
 // SubscriptionLimits describes plan limits.
 type SubscriptionLimits struct {
 	Plan             string `json:"plan"`
