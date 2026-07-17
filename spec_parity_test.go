@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hookbridge/hookbridge-go"
+	"github.com/hookbridge/hookbridge-go/v2"
 )
 
 func newMockClient(t *testing.T, handler http.HandlerFunc) *hookbridge.Client {
@@ -48,26 +48,9 @@ func readJSONBody(t *testing.T, r *http.Request) map[string]any {
 	return out
 }
 
-func TestSpecParityProjectsAndSigningKeys(t *testing.T) {
+func TestSpecParitySigningKeys(t *testing.T) {
 	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/v1/projects":
-			w.Header().Set("Content-Type", "application/json")
-			io.WriteString(w, `{"data":[{"id":"proj_1","tenant_id":"tenant_1","name":"Main","status":"active","rate_limit_default":1000,"created_at":"2025-12-01T10:00:00Z"}],"meta":{"request_id":"req_1"}}`)
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/projects":
-			body := readJSONBody(t, r)
-			if body["name"] != "New Project" {
-				t.Fatalf("expected project name in request, got %#v", body)
-			}
-			w.Header().Set("Content-Type", "application/json")
-			io.WriteString(w, `{"data":{"id":"proj_2","tenant_id":"tenant_1","name":"New Project","status":"active","rate_limit_default":500,"created_at":"2025-12-01T10:00:00Z"},"meta":{"request_id":"req_2"}}`)
-		case r.Method == http.MethodPatch && r.URL.Path == "/v1/projects/proj_2":
-			body := readJSONBody(t, r)
-			if body["name"] != "Renamed" {
-				t.Fatalf("expected update payload, got %#v", body)
-			}
-			w.Header().Set("Content-Type", "application/json")
-			io.WriteString(w, `{"data":{"id":"proj_2","tenant_id":"tenant_1","name":"Renamed","status":"active","rate_limit_default":500,"created_at":"2025-12-01T10:00:00Z"},"meta":{"request_id":"req_3"}}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/endpoints/ep_1/signing-keys":
 			w.Header().Set("Content-Type", "application/json")
 			io.WriteString(w, `{"data":[{"id":"sk_1","key_hint":"abcd","created_at":"2025-12-06T12:10:00Z"}],"meta":{"request_id":"req_4"}}`)
@@ -83,23 +66,6 @@ func TestSpecParityProjectsAndSigningKeys(t *testing.T) {
 	})
 
 	ctx := context.Background()
-
-	projects, err := client.ListProjects(ctx)
-	if err != nil || len(projects) != 1 || projects[0].ID != "proj_1" {
-		t.Fatalf("ListProjects failed: %#v %v", projects, err)
-	}
-
-	limit := 500
-	project, err := client.CreateProject(ctx, hookbridge.CreateProjectRequest{Name: "New Project", RateLimitDefault: &limit})
-	if err != nil || project.Name != "New Project" {
-		t.Fatalf("CreateProject failed: %#v %v", project, err)
-	}
-
-	renamed := "Renamed"
-	updated, err := client.UpdateProject(ctx, "proj_2", hookbridge.UpdateProjectRequest{Name: &renamed})
-	if err != nil || updated.Name != "Renamed" {
-		t.Fatalf("UpdateProject failed: %#v %v", updated, err)
-	}
 
 	keys, err := client.ListEndpointSigningKeys(ctx, "ep_1")
 	if err != nil || len(keys) != 1 || keys[0].ID != "sk_1" {
@@ -366,13 +332,6 @@ func TestSpecParityBillingAndExports(t *testing.T) {
 	end := time.Date(2025, 12, 6, 23, 59, 59, 0, time.UTC)
 	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/billing/checkout":
-			body := readJSONBody(t, r)
-			if body["plan"] != "pro" || body["interval"] != "monthly" {
-				t.Fatalf("unexpected checkout payload %#v", body)
-			}
-			w.Header().Set("Content-Type", "application/json")
-			io.WriteString(w, `{"data":{"session_id":"cs_123","checkout_url":"https://checkout.stripe.com/c/pay/cs_123"},"meta":{"request_id":"req_3"}}`)
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/billing/usage-history"):
 			if r.URL.Query().Get("limit") != "10" || r.URL.Query().Get("offset") != "20" {
 				t.Fatalf("unexpected usage history query: %s", r.URL.RawQuery)
@@ -395,11 +354,6 @@ func TestSpecParityBillingAndExports(t *testing.T) {
 	})
 
 	ctx := context.Background()
-
-	checkout, err := client.CreateCheckout(ctx, hookbridge.CreateCheckoutRequest{Plan: "pro", Interval: "monthly"})
-	if err != nil || checkout.SessionID != "cs_123" {
-		t.Fatalf("CreateCheckout failed: %#v %v", checkout, err)
-	}
 
 	limit := 10
 	offset := 20
@@ -547,7 +501,7 @@ func TestSpecParityReplayMetricsAndInbound(t *testing.T) {
 	}
 }
 
-func TestSpecParityMessageControlsAndProjectBilling(t *testing.T) {
+func TestSpecParityMessageControlsAndBilling(t *testing.T) {
 	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/messages/m_1/replay":
@@ -562,22 +516,9 @@ func TestSpecParityMessageControlsAndProjectBilling(t *testing.T) {
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/dlq/replay/m_1":
 			w.Header().Set("Content-Type", "application/json")
 			io.WriteString(w, `{"data":{"message_id":"m_1","status":"queued"},"meta":{"request_id":"req_4"}}`)
-		case r.Method == http.MethodGet && r.URL.Path == "/v1/projects/proj_1":
-			w.Header().Set("Content-Type", "application/json")
-			io.WriteString(w, `{"data":{"id":"proj_1","tenant_id":"tenant_1","name":"Main","status":"active","rate_limit_default":1000,"created_at":"2025-12-01T10:00:00Z"},"meta":{"request_id":"req_5"}}`)
-		case r.Method == http.MethodDelete && r.URL.Path == "/v1/projects/proj_1":
-			w.Header().Set("Content-Type", "application/json")
-			io.WriteString(w, `{"data":{},"meta":{"request_id":"req_6"}}`)
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/endpoints/ep_1/signing-keys":
 			w.Header().Set("Content-Type", "application/json")
 			io.WriteString(w, `{"data":{"id":"sk_1","signing_secret":"whsec_new","key_hint":"abcd","created_at":"2025-12-06T12:10:00Z"},"meta":{"request_id":"req_7"}}`)
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/billing/portal":
-			body := readJSONBody(t, r)
-			if body["return_url"] != "https://app.hookbridge.io/billing" {
-				t.Fatalf("unexpected portal payload %#v", body)
-			}
-			w.Header().Set("Content-Type", "application/json")
-			io.WriteString(w, `{"data":{"portal_url":"https://billing.stripe.com/p/session/abc123"},"meta":{"request_id":"req_8"}}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/billing/subscription":
 			w.Header().Set("Content-Type", "application/json")
 			io.WriteString(w, `{"data":{"plan":"starter","status":"active","limits":{"plan":"starter","messages_per_month":5000,"max_projects":3,"max_endpoints":25,"retention_days":30},"usage":{"messages_used":123,"period_start":"2026-02-01T00:00:00Z","period_end":"2026-02-28T23:59:59Z"},"cancel_at_period_end":false,"current_period_end":"2026-03-01T00:00:00Z"},"meta":{"request_id":"req_9"}}`)
@@ -611,24 +552,9 @@ func TestSpecParityMessageControlsAndProjectBilling(t *testing.T) {
 		t.Fatalf("ReplayFromDLQ failed: %#v %v", fromDLQ, err)
 	}
 
-	project, err := client.GetProject(ctx, "proj_1")
-	if err != nil || project.Name != "Main" {
-		t.Fatalf("GetProject failed: %#v %v", project, err)
-	}
-
-	if err := client.DeleteProject(ctx, "proj_1"); err != nil {
-		t.Fatalf("DeleteProject failed: %v", err)
-	}
-
 	signingKey, err := client.CreateEndpointSigningKey(ctx, "ep_1")
 	if err != nil || signingKey.SigningSecret != "whsec_new" {
 		t.Fatalf("CreateEndpointSigningKey failed: %#v %v", signingKey, err)
-	}
-
-	returnURL := "https://app.hookbridge.io/billing"
-	portal, err := client.CreatePortal(ctx, &hookbridge.CreatePortalRequest{ReturnURL: &returnURL})
-	if err != nil || portal.PortalURL != "https://billing.stripe.com/p/session/abc123" {
-		t.Fatalf("CreatePortal failed: %#v %v", portal, err)
 	}
 
 	subscription, err := client.GetSubscription(ctx)

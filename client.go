@@ -283,48 +283,6 @@ func (c *Client) DeleteAPIKey(ctx context.Context, keyID string) error {
 	return c.do(ctx, http.MethodDelete, "/v1/api-keys/"+keyID, nil, &resp)
 }
 
-// ListProjects retrieves all projects for the authenticated user.
-func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
-	var resp apiResponse[[]Project]
-	if err := c.do(ctx, http.MethodGet, "/v1/projects", nil, &resp); err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
-}
-
-// CreateProject creates a project.
-func (c *Client) CreateProject(ctx context.Context, req CreateProjectRequest) (*Project, error) {
-	var resp apiResponse[Project]
-	if err := c.do(ctx, http.MethodPost, "/v1/projects", req, &resp); err != nil {
-		return nil, err
-	}
-	return &resp.Data, nil
-}
-
-// GetProject retrieves a project.
-func (c *Client) GetProject(ctx context.Context, projectID string) (*Project, error) {
-	var resp apiResponse[Project]
-	if err := c.do(ctx, http.MethodGet, "/v1/projects/"+projectID, nil, &resp); err != nil {
-		return nil, err
-	}
-	return &resp.Data, nil
-}
-
-// UpdateProject updates a project.
-func (c *Client) UpdateProject(ctx context.Context, projectID string, req UpdateProjectRequest) (*Project, error) {
-	var resp apiResponse[Project]
-	if err := c.do(ctx, http.MethodPatch, "/v1/projects/"+projectID, req, &resp); err != nil {
-		return nil, err
-	}
-	return &resp.Data, nil
-}
-
-// DeleteProject deletes a project.
-func (c *Client) DeleteProject(ctx context.Context, projectID string) error {
-	var resp apiResponse[struct{}]
-	return c.do(ctx, http.MethodDelete, "/v1/projects/"+projectID, nil, &resp)
-}
-
 // CreateEndpoint creates a new webhook endpoint.
 func (c *Client) CreateEndpoint(ctx context.Context, req CreateEndpointRequest) (*CreateEndpointResponse, error) {
 	var resp apiResponse[CreateEndpointResponse]
@@ -579,28 +537,6 @@ func (c *Client) GetPullTimeSeriesMetrics(ctx context.Context, window MetricsWin
 	path := buildWindowPath("/v1/pull-metrics/timeseries", window, pullEndpointID, "pull_endpoint_id")
 	var resp apiResponse[PullTimeSeriesMetrics]
 	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
-		return nil, err
-	}
-	return &resp.Data, nil
-}
-
-// CreateCheckout creates a Stripe checkout session.
-func (c *Client) CreateCheckout(ctx context.Context, req CreateCheckoutRequest) (*CheckoutSession, error) {
-	var resp apiResponse[CheckoutSession]
-	if err := c.do(ctx, http.MethodPost, "/v1/billing/checkout", req, &resp); err != nil {
-		return nil, err
-	}
-	return &resp.Data, nil
-}
-
-// CreatePortal creates a Stripe customer portal session.
-func (c *Client) CreatePortal(ctx context.Context, req *CreatePortalRequest) (*PortalSession, error) {
-	var body any
-	if req != nil {
-		body = req
-	}
-	var resp apiResponse[PortalSession]
-	if err := c.do(ctx, http.MethodPost, "/v1/billing/portal", body, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Data, nil
