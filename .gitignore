@@ -31,3 +31,6 @@ go.work.sum
 # .idea/
 # .vscode/
 publishing.md
+
+# Private scratch list — lives in the parent folder, never in a repo
+FINDINGS.md
