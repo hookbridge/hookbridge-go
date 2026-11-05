@@ -19,7 +19,7 @@ const (
 	defaultSendURL = "https://send.hookbridge.io"
 	defaultTimeout = 30 * time.Second
 	defaultRetries = 3
-	userAgent      = "hookbridge-go/1.5.0"
+	userAgent      = "hookbridge-go/2.1.0"
 )
 
 // Client is the HookBridge API client.

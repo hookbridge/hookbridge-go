@@ -37,6 +37,7 @@ type SendRequest struct {
 	Payload        any               `json:"payload"`
 	Headers        map[string]string `json:"headers,omitempty"`
 	IdempotencyKey string            `json:"idempotency_key,omitempty"`
+	RetentionHours *int              `json:"retention_hours,omitempty"`
 }
 
 // SendResponse represents the response from sending a webhook.
@@ -63,6 +64,12 @@ type Message struct {
 	LastError         *string       `json:"last_error,omitempty"`
 	ResponseStatus    *int          `json:"response_status,omitempty"`
 	ResponseLatencyMs *int          `json:"response_latency_ms,omitempty"`
+	FirstAttemptAt    *time.Time    `json:"first_attempt_at,omitempty"`
+	DeliveredAt       *time.Time    `json:"delivered_at,omitempty"`
+	ProcessingMs      *int          `json:"processing_ms,omitempty"`
+	TotalDeliveryMs   *int          `json:"total_delivery_ms,omitempty"`
+	QueueWaitMs       *int          `json:"queue_wait_ms,omitempty"`
+	RetentionHours    *int          `json:"retention_hours,omitempty"`
 	DeletedAt         *time.Time    `json:"deleted_at,omitempty"`
 	DeletedByUserID   *string       `json:"deleted_by_user_id,omitempty"`
 	DeletedByAPIKeyID *string       `json:"deleted_by_api_key_id,omitempty"`
@@ -76,8 +83,12 @@ type MessageSummary struct {
 	AttemptCount      int           `json:"attempt_count"`
 	CreatedAt         string        `json:"created_at"`
 	DeliveredAt       *string       `json:"delivered_at,omitempty"`
+	FirstAttemptAt    *string       `json:"first_attempt_at,omitempty"`
 	ResponseStatus    *int          `json:"response_status,omitempty"`
 	ResponseLatencyMs *int          `json:"response_latency_ms,omitempty"`
+	ProcessingMs      *int          `json:"processing_ms,omitempty"`
+	TotalDeliveryMs   *int          `json:"total_delivery_ms,omitempty"`
+	QueueWaitMs       *int          `json:"queue_wait_ms,omitempty"`
 	LastError         *string       `json:"last_error,omitempty"`
 	DeletedAt         *string       `json:"deleted_at,omitempty"`
 }
@@ -107,6 +118,9 @@ type Metrics struct {
 	Retries       int           `json:"retries"`
 	SuccessRate   float64       `json:"success_rate"`
 	AvgLatencyMs  int           `json:"avg_latency_ms"`
+
+	AvgDeliveryTimeMs int `json:"avg_delivery_time_ms"`
+	AvgQueueWaitMs    int `json:"avg_queue_wait_ms"`
 }
 
 // TimeSeriesBucket represents a single metrics bucket.
@@ -205,11 +219,21 @@ type ReplayAllMessagesRequest struct {
 	Limit      *int
 }
 
+// ReplayErrorCode is a machine-readable reason a message could not be replayed.
+type ReplayErrorCode string
+
+const (
+	ReplayErrorMessageDeleted     ReplayErrorCode = "MESSAGE_DELETED"
+	ReplayErrorRetentionExpired   ReplayErrorCode = "RETENTION_EXPIRED"
+	ReplayErrorPayloadUnavailable ReplayErrorCode = "PAYLOAD_UNAVAILABLE"
+)
+
 // ReplayResult represents the result for a single replayed message.
 type ReplayResult struct {
-	MessageID string  `json:"message_id"`
-	Status    string  `json:"status"`
-	Error     *string `json:"error,omitempty"`
+	MessageID string           `json:"message_id"`
+	Status    string           `json:"status"`
+	Error     *string          `json:"error,omitempty"`
+	ErrorCode *ReplayErrorCode `json:"error_code,omitempty"`
 }
 
 // ReplayAllResult contains a bulk replay summary.
@@ -250,17 +274,21 @@ type Endpoint struct {
 	Burst        *int               `json:"burst,omitempty"`
 	Headers      *map[string]string `json:"headers,omitempty"`
 	Paused       bool               `json:"paused"`
+	Ephemeral    *bool              `json:"ephemeral,omitempty"`
+	ExpiresAt    *time.Time         `json:"expires_at,omitempty"`
 	CreatedAt    time.Time          `json:"created_at"`
 	UpdatedAt    time.Time          `json:"updated_at"`
 }
 
 // EndpointSummary represents a summary of an endpoint for list responses.
 type EndpointSummary struct {
-	ID          string    `json:"id"`
-	URL         string    `json:"url"`
-	Description *string   `json:"description,omitempty"`
-	Paused      bool      `json:"paused"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          string     `json:"id"`
+	URL         string     `json:"url"`
+	Description *string    `json:"description,omitempty"`
+	Paused      bool       `json:"paused"`
+	Ephemeral   *bool      `json:"ephemeral,omitempty"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 // CreateEndpointRequest represents a request to create an endpoint.
@@ -270,17 +298,21 @@ type CreateEndpointRequest struct {
 	RateLimitRPS *int               `json:"rate_limit_rps,omitempty"`
 	Burst        *int               `json:"burst,omitempty"`
 	Headers      *map[string]string `json:"headers,omitempty"`
+	Ephemeral    *bool              `json:"ephemeral,omitempty"`
+	TTLMinutes   *int               `json:"ttl_minutes,omitempty"`
 }
 
 // CreateEndpointResponse represents the response from creating an endpoint.
 type CreateEndpointResponse struct {
-	ID            string    `json:"id"`
-	URL           string    `json:"url"`
-	Description   *string   `json:"description,omitempty"`
-	SigningKeyID  string    `json:"signing_key_id"`
-	SigningSecret string    `json:"signing_secret"`
-	KeyHint       string    `json:"key_hint"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID            string     `json:"id"`
+	URL           string     `json:"url"`
+	Description   *string    `json:"description,omitempty"`
+	SigningKeyID  string     `json:"signing_key_id"`
+	SigningSecret string     `json:"signing_secret"`
+	KeyHint       string     `json:"key_hint"`
+	Ephemeral     *bool      `json:"ephemeral,omitempty"`
+	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
 }
 
 // UpdateEndpointRequest represents a request to update an endpoint.
@@ -332,6 +364,7 @@ type PullEndpoint struct {
 	TokenQueryParam        *string             `json:"token_query_param,omitempty"`
 	VerifyHMAC             *bool               `json:"verify_hmac,omitempty"`
 	HMACHeaderName         *string             `json:"hmac_header_name,omitempty"`
+	HMACSignatureEncoding  *string             `json:"hmac_signature_encoding,omitempty"`
 	TimestampHeaderName    *string             `json:"timestamp_header_name,omitempty"`
 	TimestampTTLSeconds    *int                `json:"timestamp_ttl_seconds,omitempty"`
 	VerifyIPAllowlist      *bool               `json:"verify_ip_allowlist,omitempty"`
@@ -355,6 +388,7 @@ type CreatePullEndpointRequest struct {
 	TokenValue             *string   `json:"token_value,omitempty"`
 	VerifyHMAC             *bool     `json:"verify_hmac,omitempty"`
 	HMACHeaderName         *string   `json:"hmac_header_name,omitempty"`
+	HMACSignatureEncoding  *string   `json:"hmac_signature_encoding,omitempty"`
 	HMACSecret             *string   `json:"hmac_secret,omitempty"`
 	TimestampHeaderName    *string   `json:"timestamp_header_name,omitempty"`
 	TimestampTTLSeconds    *int      `json:"timestamp_ttl_seconds,omitempty"`
@@ -383,6 +417,7 @@ type UpdatePullEndpointRequest struct {
 	TokenValue             *string   `json:"token_value,omitempty"`
 	VerifyHMAC             *bool     `json:"verify_hmac,omitempty"`
 	HMACHeaderName         *string   `json:"hmac_header_name,omitempty"`
+	HMACSignatureEncoding  *string   `json:"hmac_signature_encoding,omitempty"`
 	HMACSecret             *string   `json:"hmac_secret,omitempty"`
 	TimestampHeaderName    *string   `json:"timestamp_header_name,omitempty"`
 	TimestampTTLSeconds    *int      `json:"timestamp_ttl_seconds,omitempty"`
@@ -548,13 +583,18 @@ type SubscriptionLimits struct {
 	MaxProjects      int    `json:"max_projects"`
 	MaxEndpoints     int    `json:"max_endpoints"`
 	RetentionDays    int    `json:"retention_days"`
+
+	OverageRatePerMessage float64 `json:"overage_rate_per_message"`
 }
 
 // SubscriptionUsage describes current billing usage.
 type SubscriptionUsage struct {
-	MessagesUsed int       `json:"messages_used"`
-	PeriodStart  time.Time `json:"period_start"`
-	PeriodEnd    time.Time `json:"period_end"`
+	MessagesUsed           int       `json:"messages_used"`
+	OverageCount           int       `json:"overage_count"`
+	OverageRate            float64   `json:"overage_rate"`
+	EstimatedOverageCharge float64   `json:"estimated_overage_charge"`
+	PeriodStart            time.Time `json:"period_start"`
+	PeriodEnd              time.Time `json:"period_end"`
 }
 
 // Subscription represents subscription details.
@@ -615,32 +655,38 @@ type InvoicesResponse struct {
 
 // InboundEndpoint represents a full inbound endpoint.
 type InboundEndpoint struct {
-	ID                     string    `json:"id"`
-	Name                   string    `json:"name"`
-	Description            *string   `json:"description,omitempty"`
-	URL                    string    `json:"url"`
-	Mode                   string    `json:"mode"`
-	Active                 bool      `json:"active"`
-	Paused                 bool      `json:"paused"`
-	VerifyStaticToken      bool      `json:"verify_static_token"`
-	VerifyHMAC             bool      `json:"verify_hmac"`
-	VerifyIPAllowlist      bool      `json:"verify_ip_allowlist"`
-	IngestResponseCode     int       `json:"ingest_response_code"`
-	IdempotencyHeaderNames []string  `json:"idempotency_header_names"`
-	SigningEnabled         bool      `json:"signing_enabled"`
-	CreatedAt              time.Time `json:"created_at"`
-	UpdatedAt              time.Time `json:"updated_at"`
+	ID                     string     `json:"id"`
+	Name                   string     `json:"name"`
+	Description            *string    `json:"description,omitempty"`
+	URL                    string     `json:"url"`
+	Mode                   string     `json:"mode"`
+	Ephemeral              *bool      `json:"ephemeral,omitempty"`
+	ExpiresAt              *time.Time `json:"expires_at,omitempty"`
+	IngestURL              *string    `json:"ingest_url,omitempty"`
+	Active                 bool       `json:"active"`
+	Paused                 bool       `json:"paused"`
+	VerifyStaticToken      bool       `json:"verify_static_token"`
+	VerifyHMAC             bool       `json:"verify_hmac"`
+	HMACSignatureEncoding  *string    `json:"hmac_signature_encoding,omitempty"`
+	VerifyIPAllowlist      bool       `json:"verify_ip_allowlist"`
+	IngestResponseCode     int        `json:"ingest_response_code"`
+	IdempotencyHeaderNames []string   `json:"idempotency_header_names"`
+	SigningEnabled         bool       `json:"signing_enabled"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
 }
 
 // InboundEndpointSummary represents a summary inbound endpoint.
 type InboundEndpointSummary struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	URL       string    `json:"url"`
-	Mode      string    `json:"mode"`
-	Active    bool      `json:"active"`
-	Paused    bool      `json:"paused"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	URL       string     `json:"url"`
+	Mode      string     `json:"mode"`
+	Ephemeral *bool      `json:"ephemeral,omitempty"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	Active    bool       `json:"active"`
+	Paused    bool       `json:"paused"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 // CreateInboundEndpointRequest represents a request to create an inbound endpoint.
@@ -655,6 +701,7 @@ type CreateInboundEndpointRequest struct {
 	TokenValue             *string   `json:"token_value,omitempty"`
 	VerifyHMAC             *bool     `json:"verify_hmac,omitempty"`
 	HMACHeaderName         *string   `json:"hmac_header_name,omitempty"`
+	HMACSignatureEncoding  *string   `json:"hmac_signature_encoding,omitempty"`
 	HMACSecret             *string   `json:"hmac_secret,omitempty"`
 	TimestampHeaderName    *string   `json:"timestamp_header_name,omitempty"`
 	TimestampTTLSeconds    *int      `json:"timestamp_ttl_seconds,omitempty"`
@@ -663,20 +710,25 @@ type CreateInboundEndpointRequest struct {
 	IdempotencyHeaderNames *[]string `json:"idempotency_header_names,omitempty"`
 	IngestResponseCode     *int      `json:"ingest_response_code,omitempty"`
 	SigningEnabled         *bool     `json:"signing_enabled,omitempty"`
+	Ephemeral              *bool     `json:"ephemeral,omitempty"`
+	TTLMinutes             *int      `json:"ttl_minutes,omitempty"`
 }
 
 // CreateInboundEndpointResponse represents the one-time inbound endpoint creation payload.
 type CreateInboundEndpointResponse struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	URL           string    `json:"url"`
-	Mode          string    `json:"mode"`
-	IngestURL     string    `json:"ingest_url"`
-	SecretToken   string    `json:"secret_token"`
-	SigningKeyID  *string   `json:"signing_key_id,omitempty"`
-	SigningSecret *string   `json:"signing_secret,omitempty"`
-	KeyHint       *string   `json:"key_hint,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID                    string     `json:"id"`
+	Name                  string     `json:"name"`
+	URL                   string     `json:"url"`
+	Mode                  string     `json:"mode"`
+	IngestURL             string     `json:"ingest_url"`
+	SecretToken           string     `json:"secret_token"`
+	HMACSignatureEncoding *string    `json:"hmac_signature_encoding,omitempty"`
+	Ephemeral             *bool      `json:"ephemeral,omitempty"`
+	ExpiresAt             *time.Time `json:"expires_at,omitempty"`
+	SigningKeyID          *string    `json:"signing_key_id,omitempty"`
+	SigningSecret         *string    `json:"signing_secret,omitempty"`
+	KeyHint               *string    `json:"key_hint,omitempty"`
+	CreatedAt             time.Time  `json:"created_at"`
 }
 
 // UpdateInboundEndpointRequest represents a request to update an inbound endpoint.
@@ -691,6 +743,7 @@ type UpdateInboundEndpointRequest struct {
 	TokenValue             *string   `json:"token_value,omitempty"`
 	VerifyHMAC             *bool     `json:"verify_hmac,omitempty"`
 	HMACHeaderName         *string   `json:"hmac_header_name,omitempty"`
+	HMACSignatureEncoding  *string   `json:"hmac_signature_encoding,omitempty"`
 	HMACSecret             *string   `json:"hmac_secret,omitempty"`
 	TimestampHeaderName    *string   `json:"timestamp_header_name,omitempty"`
 	TimestampTTLSeconds    *int      `json:"timestamp_ttl_seconds,omitempty"`
@@ -868,6 +921,7 @@ type InboundMessage struct {
 	TotalDeliveryMs   *int          `json:"total_delivery_ms,omitempty"`
 	DeliveredAt       *time.Time    `json:"delivered_at,omitempty"`
 	FailedAt          *time.Time    `json:"failed_at,omitempty"`
+	RetentionHours    *int          `json:"retention_hours,omitempty"`
 	DeletedAt         *time.Time    `json:"deleted_at,omitempty"`
 	DeletedByUserID   *string       `json:"deleted_by_user_id,omitempty"`
 	DeletedByAPIKeyID *string       `json:"deleted_by_api_key_id,omitempty"`
@@ -879,24 +933,29 @@ type CreateExportRequest struct {
 	EndTime    time.Time      `json:"end_time"`
 	Status     *MessageStatus `json:"status,omitempty"`
 	EndpointID *string        `json:"endpoint_id,omitempty"`
+
+	Direction         *string `json:"direction,omitempty"`
+	InboundEndpointID *string `json:"inbound_endpoint_id,omitempty"`
 }
 
 // ExportRecord represents an export job.
 type ExportRecord struct {
-	ID               string         `json:"id"`
-	ProjectID        string         `json:"project_id"`
-	Status           string         `json:"status"`
-	FilterStartTime  time.Time      `json:"filter_start_time"`
-	FilterEndTime    time.Time      `json:"filter_end_time"`
-	FilterStatus     *MessageStatus `json:"filter_status,omitempty"`
-	FilterEndpointID *string        `json:"filter_endpoint_id,omitempty"`
-	RowCount         *int           `json:"row_count,omitempty"`
-	FileSizeBytes    *int           `json:"file_size_bytes,omitempty"`
-	ErrorMessage     *string        `json:"error_message,omitempty"`
-	StartedAt        *time.Time     `json:"started_at,omitempty"`
-	CompletedAt      *time.Time     `json:"completed_at,omitempty"`
-	ExpiresAt        *time.Time     `json:"expires_at,omitempty"`
-	CreatedAt        time.Time      `json:"created_at"`
+	ID                      string         `json:"id"`
+	ProjectID               string         `json:"project_id"`
+	Status                  string         `json:"status"`
+	FilterStartTime         time.Time      `json:"filter_start_time"`
+	FilterEndTime           time.Time      `json:"filter_end_time"`
+	FilterStatus            *MessageStatus `json:"filter_status,omitempty"`
+	FilterEndpointID        *string        `json:"filter_endpoint_id,omitempty"`
+	FilterInboundEndpointID *string        `json:"filter_inbound_endpoint_id,omitempty"`
+	Direction               *string        `json:"direction,omitempty"`
+	RowCount                *int           `json:"row_count,omitempty"`
+	FileSizeBytes           *int           `json:"file_size_bytes,omitempty"`
+	ErrorMessage            *string        `json:"error_message,omitempty"`
+	StartedAt               *time.Time     `json:"started_at,omitempty"`
+	CompletedAt             *time.Time     `json:"completed_at,omitempty"`
+	ExpiresAt               *time.Time     `json:"expires_at,omitempty"`
+	CreatedAt               time.Time      `json:"created_at"`
 }
 
 // DownloadExportResponse contains the presigned download URL returned by the redirect.
@@ -989,10 +1048,18 @@ type DeleteEventBatchResponse struct {
 	NotFoundCount       int                    `json:"not_found_count"`
 }
 
+// DeleteErrorCode is a machine-readable code for a failed or partially failed delete-all.
+type DeleteErrorCode string
+
+const (
+	DeleteErrorDeleteFailed         DeleteErrorCode = "DELETE_FAILED"
+	DeleteErrorPartialDeleteFailure DeleteErrorCode = "PARTIAL_DELETE_FAILURE"
+)
+
 // DeletePartialError describes a partial-failure error from a delete-all response.
 type DeletePartialError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code    DeleteErrorCode `json:"code"`
+	Message string          `json:"message"`
 }
 
 // DeleteAllResponse represents the response to a delete-all of outbound or inbound messages.
