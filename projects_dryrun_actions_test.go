@@ -2,6 +2,7 @@ package hookbridge_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"testing"
@@ -100,4 +101,42 @@ func TestListInboundMessageActions(t *testing.T) {
 	})
 	resp, err := client.ListInboundMessageActions(context.Background(), "in_1", hookbridge.ListMessageActionsParams{})
 	checkActions(t, resp, err)
+}
+
+func TestReplayAllDryRunOmitsUnsetParams(t *testing.T) {
+	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if len(q) != 2 || q.Get("status") != "failed_permanent" || q.Get("dry_run") != "true" {
+			t.Errorf("unexpected query %q", r.URL.RawQuery)
+		}
+		io.WriteString(w, `{"data":{"would_replay":0},"meta":{"request_id":"r"}}`)
+	})
+	if _, err := client.ReplayAllDryRun(context.Background(), hookbridge.ReplayAllMessagesRequest{Status: hookbridge.StatusFailedPermanent}); err != nil {
+		t.Fatalf("ReplayAllDryRun: %v", err)
+	}
+}
+
+func TestListMessageActionsEmptyParams(t *testing.T) {
+	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages/m1/actions" || r.URL.RawQuery != "" {
+			t.Errorf("unexpected request %s", r.URL.String())
+		}
+		io.WriteString(w, `{"data":[],"meta":{"request_id":"r","has_more":false}}`)
+	})
+	resp, err := client.ListMessageActions(context.Background(), "m1", hookbridge.ListMessageActionsParams{})
+	if err != nil || len(resp.Actions) != 0 || resp.HasMore || resp.NextCursor != nil {
+		t.Fatalf("ListMessageActions: %#v %v", resp, err)
+	}
+}
+
+func TestListProjectsUnauthorized(t *testing.T) {
+	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		io.WriteString(w, `{"error":{"code":"UNAUTHORIZED","message":"API keys cannot list projects"}}`)
+	})
+	_, err := client.ListProjects(context.Background())
+	var authErr *hookbridge.AuthenticationError
+	if !errors.As(err, &authErr) || authErr.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected AuthenticationError, got %#v", err)
+	}
 }

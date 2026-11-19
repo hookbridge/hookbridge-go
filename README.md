@@ -82,9 +82,11 @@ _ = dryRun.Data.WouldReplay
 // Audit who replayed, retried or cancelled a message.
 actions, _ := client.ListMessageActions(ctx, message.ID, hookbridge.ListMessageActionsParams{Limit: 50})
 _ = actions
+
+// Inbound equivalents: ReplayAllInboundMessagesDryRun and ListInboundMessageActions.
 ```
 
-`ListProjects` returns the projects the caller can access, and needs an OAuth user token (API keys get a 401).
+`ListProjects` returns the projects the caller can access. An API key gets a 401. For now, pass an OAuth user access token as the `NewClient` key argument (it is sent as `Authorization: Bearer`); token refresh support is coming later.
 
 ## Inbound Webhooks
 

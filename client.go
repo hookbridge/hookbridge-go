@@ -168,7 +168,9 @@ func (c *Client) ListMessageActions(ctx context.Context, messageID string, param
 }
 
 // ListProjects lists the projects the authenticated user can access.
-// It requires an OAuth user token; API keys receive a 401.
+// An API key gets a 401. For now, pass an OAuth user access token as the
+// NewClient key argument (it is sent as Authorization: Bearer); token refresh
+// support is coming later.
 func (c *Client) ListProjects(ctx context.Context) ([]ProjectWithRole, error) {
 	var resp apiResponse[[]ProjectWithRole]
 	if err := c.do(ctx, http.MethodGet, "/v1/projects", nil, &resp); err != nil {
