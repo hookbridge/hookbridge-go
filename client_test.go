@@ -55,7 +55,7 @@ func newTestClient(t *testing.T) *hookbridge.Client {
 // API-key-compatible billing methods remain.
 func TestSessionOnlyMethodsRemoved(t *testing.T) {
 	c := &hookbridge.Client{}
-	for _, name := range []string{"ListProjects", "CreateProject", "GetProject", "UpdateProject", "DeleteProject", "CreateCheckout", "CreatePortal"} {
+	for _, name := range []string{"CreateProject", "GetProject", "UpdateProject", "DeleteProject", "CreateCheckout", "CreatePortal"} {
 		if _, ok := reflect.TypeOf(c).MethodByName(name); ok {
 			t.Errorf("%s should have been removed", name)
 		}

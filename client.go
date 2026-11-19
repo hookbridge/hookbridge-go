@@ -152,6 +152,31 @@ func (c *Client) ReplayAll(ctx context.Context, req ReplayAllMessagesRequest) (*
 	return &resp, nil
 }
 
+// ReplayAllDryRun counts the outbound messages ReplayAll would attempt without replaying any.
+func (c *Client) ReplayAllDryRun(ctx context.Context, req ReplayAllMessagesRequest) (*ReplayAllDryRunResponse, error) {
+	path := "/v1/messages/replay-all?" + buildReplayAllQuery(req, "endpoint_id") + "&dry_run=true"
+	var resp ReplayAllDryRunResponse
+	if err := c.do(ctx, http.MethodPost, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// ListMessageActions lists the actions taken on an outbound message, newest first.
+func (c *Client) ListMessageActions(ctx context.Context, messageID string, params ListMessageActionsParams) (*ListMessageActionsResponse, error) {
+	return c.listActions(ctx, "/v1/messages/"+url.PathEscape(messageID)+"/actions", params)
+}
+
+// ListProjects lists the projects the authenticated user can access.
+// It requires an OAuth user token; API keys receive a 401.
+func (c *Client) ListProjects(ctx context.Context) ([]ProjectWithRole, error) {
+	var resp apiResponse[[]ProjectWithRole]
+	if err := c.do(ctx, http.MethodGet, "/v1/projects", nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
 // ReplayBatch replays specific outbound messages.
 func (c *Client) ReplayBatch(ctx context.Context, messageIDs []string) (*ReplayBatchMessagesResponse, error) {
 	var resp ReplayBatchMessagesResponse
@@ -729,6 +754,25 @@ func (c *Client) ReplayAllInboundMessages(ctx context.Context, req InboundReplay
 	return &resp, nil
 }
 
+// ReplayAllInboundMessagesDryRun counts the inbound messages ReplayAllInboundMessages would attempt without replaying any.
+func (c *Client) ReplayAllInboundMessagesDryRun(ctx context.Context, req InboundReplayAllRequest) (*ReplayAllDryRunResponse, error) {
+	path := "/v1/inbound-messages/replay-all?" + buildReplayAllQuery(ReplayAllMessagesRequest{
+		Status:     req.Status,
+		EndpointID: req.InboundEndpointID,
+		Limit:      req.Limit,
+	}, "inbound_endpoint_id") + "&dry_run=true"
+	var resp ReplayAllDryRunResponse
+	if err := c.do(ctx, http.MethodPost, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// ListInboundMessageActions lists the actions taken on an inbound message, newest first.
+func (c *Client) ListInboundMessageActions(ctx context.Context, messageID string, params ListMessageActionsParams) (*ListMessageActionsResponse, error) {
+	return c.listActions(ctx, "/v1/inbound-messages/"+url.PathEscape(messageID)+"/actions", params)
+}
+
 // ReplayBatchInboundMessages replays specific inbound messages.
 func (c *Client) ReplayBatchInboundMessages(ctx context.Context, messageIDs []string) (*ReplayBatchMessagesResponse, error) {
 	var resp ReplayBatchMessagesResponse
@@ -995,6 +1039,22 @@ func (c *Client) LookupActors(ctx context.Context, req ActorLookupRequest) (*Act
 		return nil, err
 	}
 	return &resp.Data, nil
+}
+
+func (c *Client) listActions(ctx context.Context, basePath string, params ListMessageActionsParams) (*ListMessageActionsResponse, error) {
+	path := appendQuery(basePath, func(query url.Values) {
+		if params.Cursor != "" {
+			query.Set("cursor", params.Cursor)
+		}
+		if params.Limit > 0 {
+			query.Set("limit", strconv.Itoa(params.Limit))
+		}
+	})
+	var resp apiResponse[[]MessageAction]
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &ListMessageActionsResponse{Actions: resp.Data, HasMore: resp.Meta.HasMore, NextCursor: resp.Meta.NextCursor}, nil
 }
 
 func buildReplayAllQuery(req ReplayAllMessagesRequest, endpointKey string) string {

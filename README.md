@@ -72,7 +72,19 @@ _, _ = client.ReplayAll(ctx, hookbridge.ReplayAllMessagesRequest{
 	EndpointID: &endpoint.ID,
 	Limit:      intPtr(50),
 })
+
+// Preview how many messages ReplayAll would attempt, without replaying any.
+dryRun, _ := client.ReplayAllDryRun(ctx, hookbridge.ReplayAllMessagesRequest{
+	Status: hookbridge.StatusFailedPermanent,
+})
+_ = dryRun.Data.WouldReplay
+
+// Audit who replayed, retried or cancelled a message.
+actions, _ := client.ListMessageActions(ctx, message.ID, hookbridge.ListMessageActionsParams{Limit: 50})
+_ = actions
 ```
+
+`ListProjects` returns the projects the caller can access, and needs an OAuth user token (API keys get a 401).
 
 ## Inbound Webhooks
 
