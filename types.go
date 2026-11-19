@@ -1124,3 +1124,44 @@ type ActorLookupResponse struct {
 	Users   map[string]ActorUser   `json:"users,omitempty"`
 	APIKeys map[string]ActorAPIKey `json:"api_keys,omitempty"`
 }
+
+// ReplayAllDryRunResponse is the replay-all response when dry_run=true.
+type ReplayAllDryRunResponse struct {
+	Data ReplayAllDryRunResult `json:"data"`
+	Meta ReplayAllDryRunMeta   `json:"meta"`
+}
+
+// ReplayAllDryRunResult holds the number of messages a real replay would attempt.
+type ReplayAllDryRunResult struct {
+	WouldReplay int `json:"would_replay"`
+}
+
+// ReplayAllDryRunMeta holds dry-run response metadata.
+type ReplayAllDryRunMeta struct {
+	RequestID string `json:"request_id"`
+}
+
+// ListMessageActionsParams are the paging parameters for listing message actions.
+type ListMessageActionsParams struct {
+	Cursor string
+	Limit  int
+}
+
+// MessageAction is one requested action on a message. Via and ClientName are
+// self-reported display values and must not be used for access control.
+type MessageAction struct {
+	ID         string    `json:"id"`
+	Action     string    `json:"action"`
+	UserID     *string   `json:"user_id"`
+	APIKeyID   *string   `json:"api_key_id"`
+	Via        string    `json:"via"`
+	ClientName *string   `json:"client_name"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// ListMessageActionsResponse is one page of message actions.
+type ListMessageActionsResponse struct {
+	Actions    []MessageAction
+	HasMore    bool
+	NextCursor *string
+}
