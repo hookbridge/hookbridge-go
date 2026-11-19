@@ -86,8 +86,6 @@ _ = actions
 // Inbound equivalents: ReplayAllInboundMessagesDryRun and ListInboundMessageActions.
 ```
 
-`ListProjects` returns the projects the caller can access. An API key gets a 401. For now, pass an OAuth user access token as the `NewClient` key argument (it is sent as `Authorization: Bearer`); token refresh support is coming later.
-
 ## Inbound Webhooks
 
 ```go

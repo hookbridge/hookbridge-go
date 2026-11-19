@@ -1125,17 +1125,6 @@ type ActorLookupResponse struct {
 	APIKeys map[string]ActorAPIKey `json:"api_keys,omitempty"`
 }
 
-// ProjectWithRole is a project plus the authenticated user's role in it.
-type ProjectWithRole struct {
-	ID               string    `json:"id"`
-	TenantID         string    `json:"tenant_id"`
-	Name             string    `json:"name"`
-	Status           string    `json:"status"`
-	RateLimitDefault int       `json:"rate_limit_default"`
-	CreatedAt        time.Time `json:"created_at"`
-	Role             string    `json:"role"`
-}
-
 // ReplayAllDryRunResponse is the replay-all response when dry_run=true.
 type ReplayAllDryRunResponse struct {
 	Data ReplayAllDryRunResult `json:"data"`

@@ -2,30 +2,12 @@ package hookbridge_test
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"testing"
 
 	"github.com/hookbridge/hookbridge-go/v2"
 )
-
-func TestListProjects(t *testing.T) {
-	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/v1/projects" {
-			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
-		}
-		io.WriteString(w, `{"data":[{"id":"p1","tenant_id":"t1","name":"Prod","status":"active","rate_limit_default":1000,"created_at":"2025-12-01T10:00:00Z","role":"developer"}],"meta":{"request_id":"req_1"}}`)
-	})
-	projects, err := client.ListProjects(context.Background())
-	if err != nil || len(projects) != 1 {
-		t.Fatalf("ListProjects: %#v %v", projects, err)
-	}
-	p := projects[0]
-	if p.ID != "p1" || p.TenantID != "t1" || p.Name != "Prod" || p.Status != "active" || p.RateLimitDefault != 1000 || p.Role != "developer" || p.CreatedAt.IsZero() {
-		t.Fatalf("project: %#v", p)
-	}
-}
 
 func TestReplayAllDryRun(t *testing.T) {
 	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -126,17 +108,5 @@ func TestListMessageActionsEmptyParams(t *testing.T) {
 	resp, err := client.ListMessageActions(context.Background(), "m1", hookbridge.ListMessageActionsParams{})
 	if err != nil || len(resp.Actions) != 0 || resp.HasMore || resp.NextCursor != nil {
 		t.Fatalf("ListMessageActions: %#v %v", resp, err)
-	}
-}
-
-func TestListProjectsUnauthorized(t *testing.T) {
-	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-		io.WriteString(w, `{"error":{"code":"UNAUTHORIZED","message":"API keys cannot list projects"}}`)
-	})
-	_, err := client.ListProjects(context.Background())
-	var authErr *hookbridge.AuthenticationError
-	if !errors.As(err, &authErr) || authErr.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("expected AuthenticationError, got %#v", err)
 	}
 }

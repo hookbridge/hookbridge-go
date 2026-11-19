@@ -167,18 +167,6 @@ func (c *Client) ListMessageActions(ctx context.Context, messageID string, param
 	return c.listActions(ctx, "/v1/messages/"+url.PathEscape(messageID)+"/actions", params)
 }
 
-// ListProjects lists the projects the authenticated user can access.
-// An API key gets a 401. For now, pass an OAuth user access token as the
-// NewClient key argument (it is sent as Authorization: Bearer); token refresh
-// support is coming later.
-func (c *Client) ListProjects(ctx context.Context) ([]ProjectWithRole, error) {
-	var resp apiResponse[[]ProjectWithRole]
-	if err := c.do(ctx, http.MethodGet, "/v1/projects", nil, &resp); err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
-}
-
 // ReplayBatch replays specific outbound messages.
 func (c *Client) ReplayBatch(ctx context.Context, messageIDs []string) (*ReplayBatchMessagesResponse, error) {
 	var resp ReplayBatchMessagesResponse
