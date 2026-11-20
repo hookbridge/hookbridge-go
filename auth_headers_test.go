@@ -108,7 +108,11 @@ func TestTokenFetchedPerRetryAttempt(t *testing.T) {
 func TestTokenSourceErrorStopsRequest(t *testing.T) {
 	srv, rec := newRecordingServer(t, okHandler)
 	sentinel := errors.New("refresh failed for secret-refresh-token")
-	ts := hookbridge.TokenSourceFunc(func(context.Context) (string, error) { return "", sentinel })
+	var calls int32
+	ts := hookbridge.TokenSourceFunc(func(context.Context) (string, error) {
+		atomic.AddInt32(&calls, 1)
+		return "", sentinel
+	})
 	c, err := hookbridge.NewClientWithTokenSource(ts, hookbridge.WithBaseURL(srv.URL), hookbridge.WithRetries(3))
 	if err != nil {
 		t.Fatal(err)
@@ -119,6 +123,9 @@ func TestTokenSourceErrorStopsRequest(t *testing.T) {
 	}
 	if len(rec.all()) != 0 {
 		t.Fatal("no request should reach the server")
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("token source called %d times, want 1", got)
 	}
 	if !errors.Is(err, sentinel) {
 		t.Error("error should unwrap to the original")
@@ -333,5 +340,47 @@ func TestUserAgentPinned(t *testing.T) {
 	}
 	if hookbridge.Version != "2.2.0" {
 		t.Errorf("Version = %q", hookbridge.Version)
+	}
+}
+
+func TestControlCharTokenRejected(t *testing.T) {
+	srv, rec := newRecordingServer(t, okHandler)
+	for _, tok := range []string{"abc\r\nX-Evil: 1", "abc\n", "a\x00b", "a\x7fb"} {
+		var calls int32
+		ts := hookbridge.TokenSourceFunc(func(context.Context) (string, error) {
+			atomic.AddInt32(&calls, 1)
+			return tok, nil
+		})
+		c, _ := hookbridge.NewClientWithTokenSource(ts, hookbridge.WithBaseURL(srv.URL), hookbridge.WithRetries(3))
+		_, err := c.GetExport(context.Background(), "exp_1")
+		var authErr *hookbridge.AuthenticationError
+		if !errors.As(err, &authErr) || authErr.Code != "TOKEN_SOURCE_ERROR" {
+			t.Fatalf("%q: expected TOKEN_SOURCE_ERROR, got %#v", tok, err)
+		}
+		if strings.Contains(err.Error(), "abc") || strings.Contains(err.Error(), "X-Evil") {
+			t.Errorf("%q: error leaks token: %v", tok, err)
+		}
+		if got := atomic.LoadInt32(&calls); got != 1 {
+			t.Errorf("%q: token source called %d times, want 1", tok, got)
+		}
+	}
+	if len(rec.all()) != 0 {
+		t.Fatal("no request should be sent")
+	}
+}
+
+func TestTokenSourceErrorWithCancelledContextIsTimeout(t *testing.T) {
+	srv, rec := newRecordingServer(t, okHandler)
+	ts := hookbridge.TokenSourceFunc(func(ctx context.Context) (string, error) { return "", ctx.Err() })
+	c, _ := hookbridge.NewClientWithTokenSource(ts, hookbridge.WithBaseURL(srv.URL))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := c.GetExport(ctx, "exp_1")
+	var tErr *hookbridge.TimeoutError
+	if !errors.As(err, &tErr) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected TimeoutError wrapping context.Canceled, got %#v", err)
+	}
+	if len(rec.all()) != 0 {
+		t.Fatal("no request should be sent")
 	}
 }

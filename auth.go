@@ -79,7 +79,10 @@ func (c *Client) authorize(ctx context.Context, req *http.Request) error {
 	}
 
 	token, err := c.tokens.Token(ctx)
-	if err != nil || token == "" {
+	if err != nil && ctx.Err() != nil {
+		return &TimeoutError{Err: ctx.Err()}
+	}
+	if err != nil || token == "" || hasControlChar(token) {
 		return &AuthenticationError{APIError: &APIError{
 			Code:    "TOKEN_SOURCE_ERROR",
 			Message: "failed to get access token",
