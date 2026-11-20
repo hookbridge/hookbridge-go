@@ -8,6 +8,7 @@ type APIError struct {
 	Message    string
 	RequestID  string
 	StatusCode int
+	cause      error
 }
 
 func (e *APIError) Error() string {
@@ -15,6 +16,11 @@ func (e *APIError) Error() string {
 		return fmt.Sprintf("hookbridge: %s: %s (request_id: %s)", e.Code, e.Message, e.RequestID)
 	}
 	return fmt.Sprintf("hookbridge: %s: %s", e.Code, e.Message)
+}
+
+// Unwrap returns the underlying cause, if any.
+func (e *APIError) Unwrap() error {
+	return e.cause
 }
 
 // AuthenticationError indicates an invalid or missing API key.
