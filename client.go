@@ -19,12 +19,14 @@ const (
 	defaultSendURL = "https://send.hookbridge.io"
 	defaultTimeout = 30 * time.Second
 	defaultRetries = 3
-	userAgent      = "hookbridge-go/2.1.0"
+	// Version is the SDK version, sent in the User-Agent header.
+	Version   = "2.2.0"
+	userAgent = "hookbridge-go/" + Version
 )
 
 // Client is the HookBridge API client.
 type Client struct {
-	apiKey     string
+	tokens     TokenSource
 	baseURL    string
 	sendURL    string
 	httpClient *http.Client
@@ -78,11 +80,15 @@ func NewClient(apiKey string, opts ...Option) (*Client, error) {
 		}}
 	}
 
+	return newClient(staticTokenSource(apiKey), opts), nil
+}
+
+func newClient(tokens TokenSource, opts []Option) *Client {
 	baseURL := strings.TrimSuffix(envOrDefault("HOOKBRIDGE_BASE_URL", defaultBaseURL), "/")
 	sendURL := strings.TrimSuffix(envOrDefault("HOOKBRIDGE_SEND_URL", defaultSendURL), "/")
 
 	c := &Client{
-		apiKey:  apiKey,
+		tokens:  tokens,
 		baseURL: baseURL,
 		sendURL: sendURL,
 		httpClient: &http.Client{
@@ -95,7 +101,7 @@ func NewClient(apiKey string, opts ...Option) (*Client, error) {
 		opt(c)
 	}
 
-	return c, nil
+	return c
 }
 
 func envOrDefault(key, fallback string) string {
@@ -879,8 +885,9 @@ func (c *Client) DownloadExport(ctx context.Context, exportID string) (*Download
 	if err != nil {
 		return nil, &NetworkError{Err: err}
 	}
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("User-Agent", userAgent)
+	if err := c.authorize(ctx, req); err != nil {
+		return nil, err
+	}
 
 	resp, err := cloned.Do(req)
 	if err != nil {
@@ -1152,8 +1159,9 @@ func (c *Client) doWithBaseURL(ctx context.Context, baseURL, method, path string
 			return &NetworkError{Err: err}
 		}
 
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-		req.Header.Set("User-Agent", userAgent)
+		if err := c.authorize(ctx, req); err != nil {
+			return err
+		}
 		if body != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}

@@ -37,6 +37,23 @@ func main() {
 }
 ```
 
+## OAuth Tokens and Per-Request Headers
+
+Instead of a static API key, a client can fetch its bearer token from a `TokenSource` (for example a refreshing OAuth access token). The token is requested on every request attempt, including retries.
+
+```go
+ts := hookbridge.TokenSourceFunc(func(ctx context.Context) (string, error) {
+	return myOAuthSource.AccessToken(ctx)
+})
+client, err := hookbridge.NewClientWithTokenSource(ts)
+
+ctx := hookbridge.ContextWithProject(context.Background(), "proj_123")
+ctx = hookbridge.ContextWithClientName(ctx, "my-tool/1.0")
+endpoints, err := client.ListEndpoints(ctx, nil)
+```
+
+`ContextWithProject` sets `X-Hookbridge-Project` (the project an OAuth token acts on) and `ContextWithClientName` sets `X-Hookbridge-Client` (a caller name recorded in the audit log). Both work with any client and any method. Values containing control characters are rejected before a request is sent.
+
 ## Outbound Endpoints
 
 ```go
