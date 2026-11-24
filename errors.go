@@ -1,6 +1,9 @@
 package hookbridge
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // APIError is the base error type for all HookBridge API errors.
 type APIError struct {
@@ -101,7 +104,10 @@ func newErrorFromResponse(statusCode int, code, message, requestID string) error
 		}
 		return &RateLimitError{APIError: base}
 	case 409:
-		return &IdempotencyError{APIError: base}
+		if strings.HasPrefix(code, "IDEMPOTENCY_") {
+			return &IdempotencyError{APIError: base}
+		}
+		return base
 	default:
 		return base
 	}

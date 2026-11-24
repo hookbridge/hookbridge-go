@@ -70,6 +70,45 @@ _, _ = client.RotateEndpointSecret(ctx, endpoint.ID)
 _ = client.DeleteEndpoint(ctx, endpoint.ID)
 ```
 
+## Event Types and Events
+
+Define event types, subscribe endpoints to them, and send an event without naming an endpoint: it is fanned out to every endpoint whose subscriptions match. `Send` is unchanged.
+
+```go
+_, _ = client.CreateEventType(ctx, hookbridge.CreateEventTypeRequest{Name: "order.created", Group: stringPtr("orders")})
+
+endpoint, _ := client.CreateEndpoint(ctx, hookbridge.CreateEndpointRequest{
+	URL:           "https://customer.app/webhooks",
+	Subscriptions: &hookbridge.EventSubscriptions{EventTypes: []string{"order.*"}},
+})
+matching, _ := client.ListEndpoints(ctx, &hookbridge.EndpointsFilter{EventType: stringPtr("order.created")})
+
+sent, _ := client.SendEvent(ctx, hookbridge.SendEventRequest{
+	EventType: "order.created",
+	Payload:   map[string]any{"order_id": "ord_123"},
+})
+event, _ := client.GetEvent(ctx, sent.EventID, nil) // FanoutStatus, MatchedCount, Messages
+events, _ := client.ListEvents(ctx, &hookbridge.EventsFilter{EventType: stringPtr("order.created")})
+_ = client.DeleteEvent(ctx, sent.EventID)
+
+// Omitted fields stay unchanged on update; Null clears one.
+_, _ = client.UpdateEventType(ctx, "order.created", hookbridge.UpdateEventTypeRequest{
+	Description: stringPtr("Sent when an order is placed"),
+	Group:       hookbridge.Null[string](),
+})
+_, _ = client.ArchiveEventType(ctx, "order.created")
+_, _ = client.UnarchiveEventType(ctx, "order.created")
+types, _ := client.ListEventTypes(ctx, &hookbridge.EventTypesFilter{NamePrefix: stringPtr("order.")})
+groups, _ := client.ListEventTypeGroups(ctx)
+
+// Give an endpoint the events it missed, then poll the job.
+job, _ := client.RecoverEndpoint(ctx, endpoint.ID, hookbridge.RecoverRequest{Since: time.Now().Add(-time.Hour)})
+status, _ := client.GetRecoverJob(ctx, endpoint.ID, job.RecoverJobID)
+
+// Send one test message of an existing event type to check your receiver.
+_, _ = client.SendTestEvent(ctx, endpoint.ID, hookbridge.SendTestEventRequest{EventType: "order.created"})
+```
+
 ## Sending and Observability
 
 ```go

@@ -20,7 +20,7 @@ const (
 	defaultTimeout = 30 * time.Second
 	defaultRetries = 3
 	// Version is the SDK version, sent in the User-Agent header.
-	Version   = "2.2.0"
+	Version   = "2.3.0"
 	userAgent = "hookbridge-go/" + Version
 )
 
@@ -116,6 +116,158 @@ func envOrDefault(key, fallback string) string {
 func (c *Client) Send(ctx context.Context, req SendRequest) (*SendResponse, error) {
 	var resp apiResponse[SendResponse]
 	if err := c.doSend(ctx, http.MethodPost, "/v1/webhooks/send", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// SendEvent sends a typed event. Without an endpoint ID it is fanned out to every
+// endpoint whose subscriptions match.
+func (c *Client) SendEvent(ctx context.Context, req SendEventRequest) (*SendEventResponse, error) {
+	var resp apiResponse[SendEventResponse]
+	if err := c.doSend(ctx, http.MethodPost, "/v1/webhooks/send", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// CreateEventType registers an event type in the project's catalog.
+func (c *Client) CreateEventType(ctx context.Context, req CreateEventTypeRequest) (*EventType, error) {
+	var resp apiResponse[EventType]
+	if err := c.do(ctx, http.MethodPost, "/v1/event-types", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// ListEventTypes retrieves event types ordered by name.
+func (c *Client) ListEventTypes(ctx context.Context, filter *EventTypesFilter) (*ListEventTypesResponse, error) {
+	path := appendQuery("/v1/event-types", func(query url.Values) {
+		if filter == nil {
+			return
+		}
+		setInt(query, "limit", filter.Limit)
+		setString(query, "cursor", filter.Cursor)
+		setString(query, "group", filter.Group)
+		setString(query, "name_prefix", filter.NamePrefix)
+		if filter.IncludeArchived != nil {
+			query.Set("include_archived", strconv.FormatBool(*filter.IncludeArchived))
+		}
+	})
+
+	var resp apiResponse[[]EventType]
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	out := &ListEventTypesResponse{EventTypes: resp.Data}
+	if resp.Meta.NextCursor != nil && *resp.Meta.NextCursor != "" {
+		out.HasMore = true
+		out.NextCursor = resp.Meta.NextCursor
+	}
+	return out, nil
+}
+
+// GetEventType retrieves an event type by name. Archived types are returned too.
+func (c *Client) GetEventType(ctx context.Context, name string) (*EventType, error) {
+	return c.eventTypeCall(ctx, http.MethodGet, name, "", nil)
+}
+
+// UpdateEventType updates an event type. A type cannot be renamed.
+func (c *Client) UpdateEventType(ctx context.Context, name string, req UpdateEventTypeRequest) (*EventType, error) {
+	return c.eventTypeCall(ctx, http.MethodPatch, name, "", req)
+}
+
+// ArchiveEventType archives an event type. Nothing is deleted.
+func (c *Client) ArchiveEventType(ctx context.Context, name string) (*EventType, error) {
+	return c.eventTypeCall(ctx, http.MethodDelete, name, "", nil)
+}
+
+// UnarchiveEventType restores an archived event type.
+func (c *Client) UnarchiveEventType(ctx context.Context, name string) (*EventType, error) {
+	return c.eventTypeCall(ctx, http.MethodPost, name, "/unarchive", nil)
+}
+
+// ListEventTypeGroups retrieves the group names in use with their active type counts.
+func (c *Client) ListEventTypeGroups(ctx context.Context) ([]EventTypeGroup, error) {
+	var resp apiResponse[[]EventTypeGroup]
+	if err := c.do(ctx, http.MethodGet, "/v1/event-type-groups", nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+// ListEvents retrieves events created by typed sends, newest first.
+func (c *Client) ListEvents(ctx context.Context, filter *EventsFilter) (*ListEventsResponse, error) {
+	path := appendQuery("/v1/events", func(query url.Values) {
+		if filter == nil {
+			return
+		}
+		setInt(query, "limit", filter.Limit)
+		setString(query, "cursor", filter.Cursor)
+		setString(query, "event_type", filter.EventType)
+		setTime(query, "since", filter.Since)
+		setTime(query, "until", filter.Until)
+	})
+
+	var resp apiResponse[[]Event]
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &ListEventsResponse{Events: resp.Data, HasMore: resp.Meta.HasMore, NextCursor: resp.Meta.NextCursor}, nil
+}
+
+// GetEvent retrieves an event with a page of its fanned-out messages.
+func (c *Client) GetEvent(ctx context.Context, eventID string, params *GetEventParams) (*EventDetail, error) {
+	path := appendQuery("/v1/events/"+url.PathEscape(eventID), func(query url.Values) {
+		if params == nil {
+			return
+		}
+		setInt(query, "messages_limit", params.MessagesLimit)
+		setString(query, "messages_cursor", params.MessagesCursor)
+	})
+
+	var resp apiResponse[EventDetail]
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// DeleteEvent deletes an event and all of its messages.
+func (c *Client) DeleteEvent(ctx context.Context, eventID string) error {
+	return c.do(ctx, http.MethodDelete, "/v1/events/"+url.PathEscape(eventID), nil, nil)
+}
+
+// RecoverEndpoint starts a job that gives the endpoint the events it missed in a time window.
+func (c *Client) RecoverEndpoint(ctx context.Context, endpointID string, req RecoverRequest) (*RecoverResponse, error) {
+	var resp apiResponse[RecoverResponse]
+	if err := c.do(ctx, http.MethodPost, "/v1/endpoints/"+url.PathEscape(endpointID)+"/recover", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// GetRecoverJob retrieves the state of a recover job.
+func (c *Client) GetRecoverJob(ctx context.Context, endpointID, jobID string) (*RecoverJob, error) {
+	var resp apiResponse[RecoverJob]
+	if err := c.do(ctx, http.MethodGet, "/v1/endpoints/"+url.PathEscape(endpointID)+"/recover/"+url.PathEscape(jobID), nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// SendTestEvent sends one test message of an existing event type to an endpoint.
+func (c *Client) SendTestEvent(ctx context.Context, endpointID string, req SendTestEventRequest) (*SendTestEventResponse, error) {
+	var resp apiResponse[SendTestEventResponse]
+	if err := c.do(ctx, http.MethodPost, "/v1/endpoints/"+url.PathEscape(endpointID)+"/test", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+func (c *Client) eventTypeCall(ctx context.Context, method, name, suffix string, body any) (*EventType, error) {
+	var resp apiResponse[EventType]
+	if err := c.do(ctx, method, "/v1/event-types/"+url.PathEscape(name)+suffix, body, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Data, nil
@@ -330,6 +482,7 @@ func (c *Client) ListEndpoints(ctx context.Context, filter *EndpointsFilter) (*L
 		}
 		setInt(query, "limit", filter.Limit)
 		setString(query, "cursor", filter.Cursor)
+		setString(query, "event_type", filter.EventType)
 	})
 
 	var resp apiResponse[[]EndpointSummary]
