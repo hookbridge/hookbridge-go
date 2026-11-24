@@ -109,10 +109,7 @@ func newErrorFromResponse(statusCode int, code, message, requestID string, detai
 		}
 		return &RateLimitError{APIError: base}
 	case 409:
-		if strings.HasPrefix(code, "IDEMPOTENCY_") {
-			return &IdempotencyError{APIError: base}
-		}
-		return base
+		return &IdempotencyError{APIError: base}
 	default:
 		return base
 	}

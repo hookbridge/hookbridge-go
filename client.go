@@ -1247,7 +1247,7 @@ func setInt(query url.Values, key string, value *int) {
 
 func setTime(query url.Values, key string, value *time.Time) {
 	if value != nil {
-		query.Set(key, value.Format(time.RFC3339))
+		query.Set(key, value.Format(time.RFC3339Nano))
 	}
 }
 

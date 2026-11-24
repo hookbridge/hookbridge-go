@@ -86,7 +86,7 @@ func TestCreateEventTypeExists(t *testing.T) {
 		io.WriteString(w, `{"error":{"code":"EVENT_TYPE_EXISTS","message":"exists"},"meta":{"request_id":"r"}}`)
 	})
 	_, err := client.CreateEventType(context.Background(), hookbridge.CreateEventTypeRequest{Name: "x"})
-	var apiErr *hookbridge.APIError
+	var apiErr *hookbridge.IdempotencyError
 	if !errors.As(err, &apiErr) || apiErr.Code != "EVENT_TYPE_EXISTS" || apiErr.StatusCode != 409 {
 		t.Fatalf("err: %#v", err)
 	}
@@ -358,7 +358,7 @@ func TestRecoverEndpointActive(t *testing.T) {
 		io.WriteString(w, `{"error":{"code":"RECOVER_JOB_ACTIVE","message":"active"}}`)
 	})
 	_, err := client.RecoverEndpoint(context.Background(), "ep_1", hookbridge.RecoverRequest{Since: time.Now()})
-	var apiErr *hookbridge.APIError
+	var apiErr *hookbridge.IdempotencyError
 	if !errors.As(err, &apiErr) || apiErr.Code != "RECOVER_JOB_ACTIVE" {
 		t.Fatalf("err: %#v", err)
 	}
@@ -459,4 +459,29 @@ func newMockClientWithRetries(t *testing.T, retries int, handler http.HandlerFun
 		t.Fatal(err)
 	}
 	return client
+}
+
+func TestDuplicateURLStaysIdempotencyError(t *testing.T) {
+	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		io.WriteString(w, `{"error":{"code":"DUPLICATE_URL","message":"dup"}}`)
+	})
+	_, err := client.CreateEndpoint(context.Background(), hookbridge.CreateEndpointRequest{URL: "https://x"})
+	var idem *hookbridge.IdempotencyError
+	if !errors.As(err, &idem) || idem.Code != "DUPLICATE_URL" {
+		t.Fatalf("err: %#v", err)
+	}
+}
+
+func TestListEventsKeepsSubSecondPrecision(t *testing.T) {
+	since := time.Date(2026, 6, 1, 0, 0, 0, 123456789, time.UTC)
+	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("since"); got != "2026-06-01T00:00:00.123456789Z" {
+			t.Errorf("since = %q", got)
+		}
+		io.WriteString(w, `{"data":[],"meta":{}}`)
+	})
+	if _, err := client.ListEvents(context.Background(), &hookbridge.EventsFilter{Since: &since}); err != nil {
+		t.Fatal(err)
+	}
 }
