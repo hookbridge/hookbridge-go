@@ -11,6 +11,7 @@ type APIError struct {
 	Message    string
 	RequestID  string
 	StatusCode int
+	Details    map[string]any
 	cause      error
 }
 
@@ -83,12 +84,13 @@ func (e *TimeoutError) Unwrap() error {
 }
 
 // newErrorFromResponse creates the appropriate error type from an API response.
-func newErrorFromResponse(statusCode int, code, message, requestID string) error {
+func newErrorFromResponse(statusCode int, code, message, requestID string, details map[string]any) error {
 	base := &APIError{
 		Code:       code,
 		Message:    message,
 		RequestID:  requestID,
 		StatusCode: statusCode,
+		Details:    details,
 	}
 
 	switch statusCode {
@@ -101,6 +103,9 @@ func newErrorFromResponse(statusCode int, code, message, requestID string) error
 	case 429:
 		if code == "REPLAY_LIMIT_EXCEEDED" {
 			return &ReplayLimitError{APIError: base}
+		}
+		if strings.HasSuffix(code, "_LIMIT_REACHED") {
+			return base
 		}
 		return &RateLimitError{APIError: base}
 	case 409:

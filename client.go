@@ -1351,7 +1351,7 @@ func (c *Client) doWithBaseURL(ctx context.Context, baseURL, method, path string
 		}
 
 		lastErr = c.parseErrorResponse(resp.StatusCode, respBody)
-		if !isRetryable(resp.StatusCode, nil) {
+		if !isRetryable(resp.StatusCode, nil) || isPlanLimitError(lastErr) {
 			return lastErr
 		}
 	}
@@ -1362,13 +1362,18 @@ func (c *Client) doWithBaseURL(ctx context.Context, baseURL, method, path string
 func (c *Client) parseErrorResponse(statusCode int, body []byte) error {
 	var errResp apiResponse[any]
 	if err := json.Unmarshal(body, &errResp); err == nil && errResp.Error != nil {
-		return newErrorFromResponse(statusCode, errResp.Error.Code, errResp.Error.Message, errResp.Meta.RequestID)
+		return newErrorFromResponse(statusCode, errResp.Error.Code, errResp.Error.Message, errResp.Meta.RequestID, errResp.Error.Details)
 	}
 	return &APIError{
 		Code:       "UNKNOWN_ERROR",
 		Message:    strings.TrimSpace(string(body)),
 		StatusCode: statusCode,
 	}
+}
+
+func isPlanLimitError(err error) bool {
+	apiErr, ok := err.(*APIError)
+	return ok && apiErr.StatusCode == 429 && strings.HasSuffix(apiErr.Code, "_LIMIT_REACHED")
 }
 
 // isRetryable determines if a request should be retried.

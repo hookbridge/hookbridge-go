@@ -990,8 +990,9 @@ type responseMeta struct {
 }
 
 type apiError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code    string         `json:"code"`
+	Message string         `json:"message"`
+	Details map[string]any `json:"details,omitempty"`
 }
 
 type dlqDataResponse struct {
@@ -1181,6 +1182,23 @@ type ListMessageActionsResponse struct {
 type EventSubscriptions struct {
 	EventTypes []string `json:"event_types"`
 	Groups     []string `json:"groups"`
+}
+
+// UnmarshalJSON normalises null or missing lists to empty ones.
+func (s *EventSubscriptions) UnmarshalJSON(data []byte) error {
+	type wire EventSubscriptions
+	var w wire
+	if err := json.Unmarshal(data, &w); err != nil {
+		return err
+	}
+	if w.EventTypes == nil {
+		w.EventTypes = []string{}
+	}
+	if w.Groups == nil {
+		w.Groups = []string{}
+	}
+	*s = EventSubscriptions(w)
+	return nil
 }
 
 // MarshalJSON always emits both lists, using [] for a nil slice.

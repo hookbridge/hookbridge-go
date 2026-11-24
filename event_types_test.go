@@ -2,9 +2,11 @@ package hookbridge_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -403,4 +405,58 @@ func TestSendEventIdempotencyMismatch(t *testing.T) {
 	if !errors.As(err, &idem) || idem.Code != "IDEMPOTENCY_MISMATCH" {
 		t.Fatalf("err: %#v", err)
 	}
+}
+
+func TestLimitReachedIsNotRateLimit(t *testing.T) {
+	calls := 0
+	server := newMockClientWithRetries(t, 3, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusTooManyRequests)
+		io.WriteString(w, `{"error":{"code":"EVENT_TYPE_LIMIT_REACHED","message":"limit","details":{"limit":1000}}}`)
+	})
+	_, err := server.CreateEventType(context.Background(), hookbridge.CreateEventTypeRequest{Name: "a.b"})
+	var rl *hookbridge.RateLimitError
+	var apiErr *hookbridge.APIError
+	if errors.As(err, &rl) || !errors.As(err, &apiErr) || apiErr.Code != "EVENT_TYPE_LIMIT_REACHED" || apiErr.StatusCode != 429 {
+		t.Fatalf("err: %#v", err)
+	}
+	if apiErr.Details["limit"] != float64(1000) {
+		t.Errorf("details: %#v", apiErr.Details)
+	}
+	if calls != 1 {
+		t.Errorf("limit errors must not be retried, calls = %d", calls)
+	}
+}
+
+func TestPlainRateLimitStillMapped(t *testing.T) {
+	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		io.WriteString(w, `{"error":{"code":"RATE_LIMIT_EXCEEDED","message":"slow"}}`)
+	})
+	_, err := client.SendEvent(context.Background(), hookbridge.SendEventRequest{EventType: "a.b", Payload: 1})
+	var rl *hookbridge.RateLimitError
+	if !errors.As(err, &rl) || rl.Code != "RATE_LIMIT_EXCEEDED" {
+		t.Fatalf("err: %#v", err)
+	}
+}
+
+func TestSubscriptionsNullListsNormalised(t *testing.T) {
+	var subs hookbridge.EventSubscriptions
+	if err := json.Unmarshal([]byte(`{"event_types":null}`), &subs); err != nil {
+		t.Fatal(err)
+	}
+	if subs.EventTypes == nil || subs.Groups == nil || len(subs.EventTypes) != 0 || len(subs.Groups) != 0 {
+		t.Fatalf("subs: %#v", subs)
+	}
+}
+
+func newMockClientWithRetries(t *testing.T, retries int, handler http.HandlerFunc) *hookbridge.Client {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	client, err := hookbridge.NewClient("hb_test_mock", hookbridge.WithBaseURL(server.URL), hookbridge.WithSendURL(server.URL), hookbridge.WithHTTPClient(server.Client()), hookbridge.WithRetries(retries))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client
 }
