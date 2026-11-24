@@ -335,10 +335,10 @@ func TestUserAgentPinned(t *testing.T) {
 	if _, err := c.GetExport(context.Background(), "exp_1"); err != nil {
 		t.Fatal(err)
 	}
-	if got := rec.all()[0].header.Get("User-Agent"); got != "hookbridge-go/2.2.0" {
+	if got := rec.all()[0].header.Get("User-Agent"); got != "hookbridge-go/2.3.0" {
 		t.Errorf("User-Agent = %q", got)
 	}
-	if hookbridge.Version != "2.2.0" {
+	if hookbridge.Version != "2.3.0" {
 		t.Errorf("Version = %q", hookbridge.Version)
 	}
 }

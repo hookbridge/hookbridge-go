@@ -1,6 +1,9 @@
 package hookbridge
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // MessageStatus represents the status of a webhook message.
 type MessageStatus string
@@ -267,67 +270,73 @@ type ReplayBatchMessagesResponse struct {
 
 // Endpoint represents a webhook endpoint.
 type Endpoint struct {
-	ID           string             `json:"id"`
-	URL          string             `json:"url"`
-	Description  *string            `json:"description,omitempty"`
-	RateLimitRPS *int               `json:"rate_limit_rps,omitempty"`
-	Burst        *int               `json:"burst,omitempty"`
-	Headers      *map[string]string `json:"headers,omitempty"`
-	Paused       bool               `json:"paused"`
-	Ephemeral    *bool              `json:"ephemeral,omitempty"`
-	ExpiresAt    *time.Time         `json:"expires_at,omitempty"`
-	CreatedAt    time.Time          `json:"created_at"`
-	UpdatedAt    time.Time          `json:"updated_at"`
+	ID            string              `json:"id"`
+	URL           string              `json:"url"`
+	Description   *string             `json:"description,omitempty"`
+	RateLimitRPS  *int                `json:"rate_limit_rps,omitempty"`
+	Burst         *int                `json:"burst,omitempty"`
+	Headers       *map[string]string  `json:"headers,omitempty"`
+	Subscriptions *EventSubscriptions `json:"subscriptions,omitempty"`
+	Paused        bool                `json:"paused"`
+	Ephemeral     *bool               `json:"ephemeral,omitempty"`
+	ExpiresAt     *time.Time          `json:"expires_at,omitempty"`
+	CreatedAt     time.Time           `json:"created_at"`
+	UpdatedAt     time.Time           `json:"updated_at"`
 }
 
 // EndpointSummary represents a summary of an endpoint for list responses.
 type EndpointSummary struct {
-	ID          string     `json:"id"`
-	URL         string     `json:"url"`
-	Description *string    `json:"description,omitempty"`
-	Paused      bool       `json:"paused"`
-	Ephemeral   *bool      `json:"ephemeral,omitempty"`
-	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
+	ID            string              `json:"id"`
+	URL           string              `json:"url"`
+	Description   *string             `json:"description,omitempty"`
+	Subscriptions *EventSubscriptions `json:"subscriptions,omitempty"`
+	Paused        bool                `json:"paused"`
+	Ephemeral     *bool               `json:"ephemeral,omitempty"`
+	ExpiresAt     *time.Time          `json:"expires_at,omitempty"`
+	CreatedAt     time.Time           `json:"created_at"`
 }
 
 // CreateEndpointRequest represents a request to create an endpoint.
 type CreateEndpointRequest struct {
-	URL          string             `json:"url"`
-	Description  *string            `json:"description,omitempty"`
-	RateLimitRPS *int               `json:"rate_limit_rps,omitempty"`
-	Burst        *int               `json:"burst,omitempty"`
-	Headers      *map[string]string `json:"headers,omitempty"`
-	Ephemeral    *bool              `json:"ephemeral,omitempty"`
-	TTLMinutes   *int               `json:"ttl_minutes,omitempty"`
+	URL           string              `json:"url"`
+	Description   *string             `json:"description,omitempty"`
+	RateLimitRPS  *int                `json:"rate_limit_rps,omitempty"`
+	Burst         *int                `json:"burst,omitempty"`
+	Headers       *map[string]string  `json:"headers,omitempty"`
+	Subscriptions *EventSubscriptions `json:"subscriptions,omitempty"`
+	Ephemeral     *bool               `json:"ephemeral,omitempty"`
+	TTLMinutes    *int                `json:"ttl_minutes,omitempty"`
 }
 
 // CreateEndpointResponse represents the response from creating an endpoint.
 type CreateEndpointResponse struct {
-	ID            string     `json:"id"`
-	URL           string     `json:"url"`
-	Description   *string    `json:"description,omitempty"`
-	SigningKeyID  string     `json:"signing_key_id"`
-	SigningSecret string     `json:"signing_secret"`
-	KeyHint       string     `json:"key_hint"`
-	Ephemeral     *bool      `json:"ephemeral,omitempty"`
-	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
+	ID            string              `json:"id"`
+	URL           string              `json:"url"`
+	Description   *string             `json:"description,omitempty"`
+	SigningKeyID  string              `json:"signing_key_id"`
+	SigningSecret string              `json:"signing_secret"`
+	KeyHint       string              `json:"key_hint"`
+	Subscriptions *EventSubscriptions `json:"subscriptions,omitempty"`
+	Ephemeral     *bool               `json:"ephemeral,omitempty"`
+	ExpiresAt     *time.Time          `json:"expires_at,omitempty"`
+	CreatedAt     time.Time           `json:"created_at"`
 }
 
 // UpdateEndpointRequest represents a request to update an endpoint.
 type UpdateEndpointRequest struct {
-	URL          *string            `json:"url,omitempty"`
-	Description  *string            `json:"description,omitempty"`
-	RateLimitRPS *int               `json:"rate_limit_rps,omitempty"`
-	Burst        *int               `json:"burst,omitempty"`
-	Headers      *map[string]string `json:"headers,omitempty"`
+	URL           *string             `json:"url,omitempty"`
+	Description   *string             `json:"description,omitempty"`
+	RateLimitRPS  *int                `json:"rate_limit_rps,omitempty"`
+	Burst         *int                `json:"burst,omitempty"`
+	Headers       *map[string]string  `json:"headers,omitempty"`
+	Subscriptions *EventSubscriptions `json:"subscriptions,omitempty"`
 }
 
 // UpdateResourceResponse indicates whether a resource update succeeded.
 type UpdateResourceResponse struct {
-	ID      string `json:"id"`
-	Updated bool   `json:"updated"`
+	ID            string              `json:"id"`
+	Updated       bool                `json:"updated"`
+	Subscriptions *EventSubscriptions `json:"subscriptions,omitempty"`
 }
 
 // ToggleResourceResponse indicates whether a resource state was changed.
@@ -557,8 +566,9 @@ type ListEndpointsResponse struct {
 
 // EndpointsFilter represents filtering options for listing endpoints.
 type EndpointsFilter struct {
-	Limit  *int
-	Cursor *string
+	Limit     *int
+	Cursor    *string
+	EventType *string
 }
 
 // SigningKey represents an endpoint signing key.
@@ -980,8 +990,9 @@ type responseMeta struct {
 }
 
 type apiError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code    string         `json:"code"`
+	Message string         `json:"message"`
+	Details map[string]any `json:"details,omitempty"`
 }
 
 type dlqDataResponse struct {
@@ -1164,4 +1175,262 @@ type ListMessageActionsResponse struct {
 	Actions    []MessageAction
 	HasMore    bool
 	NextCursor *string
+}
+
+// EventSubscriptions selects which events an endpoint receives. Entries are exact
+// event type names or `prefix.*` wildcards. Both lists empty means all events.
+type EventSubscriptions struct {
+	EventTypes []string `json:"event_types"`
+	Groups     []string `json:"groups"`
+}
+
+// UnmarshalJSON normalises null or missing lists to empty ones.
+func (s *EventSubscriptions) UnmarshalJSON(data []byte) error {
+	type wire EventSubscriptions
+	var w wire
+	if err := json.Unmarshal(data, &w); err != nil {
+		return err
+	}
+	if w.EventTypes == nil {
+		w.EventTypes = []string{}
+	}
+	if w.Groups == nil {
+		w.Groups = []string{}
+	}
+	*s = EventSubscriptions(w)
+	return nil
+}
+
+// MarshalJSON always emits both lists, using [] for a nil slice.
+func (s EventSubscriptions) MarshalJSON() ([]byte, error) {
+	type wire EventSubscriptions
+	if s.EventTypes == nil {
+		s.EventTypes = []string{}
+	}
+	if s.Groups == nil {
+		s.Groups = []string{}
+	}
+	return json.Marshal(wire(s))
+}
+
+// Optional distinguishes an omitted field from an explicit null in PATCH requests.
+// The zero value is omitted. Use Some to set a value and Null to clear it.
+type Optional[T any] struct {
+	set   bool
+	value *T
+}
+
+// Some returns an Optional that sends value.
+func Some[T any](value T) Optional[T] {
+	return Optional[T]{set: true, value: &value}
+}
+
+// Null returns an Optional that sends an explicit JSON null.
+func Null[T any]() Optional[T] {
+	return Optional[T]{set: true}
+}
+
+// SendEventRequest represents a typed send. Without EndpointID the event is fanned out
+// to every endpoint whose subscriptions match.
+type SendEventRequest struct {
+	EventType      string            `json:"event_type"`
+	Payload        any               `json:"payload"`
+	EndpointID     string            `json:"endpoint_id,omitempty"`
+	Headers        map[string]string `json:"headers,omitempty"`
+	IdempotencyKey string            `json:"idempotency_key,omitempty"`
+	RetentionHours *int              `json:"retention_hours,omitempty"`
+}
+
+// SendEventResponse represents the response from a typed send.
+type SendEventResponse struct {
+	EventID   string  `json:"event_id"`
+	EventType string  `json:"event_type"`
+	Status    string  `json:"status"`
+	MessageID *string `json:"message_id,omitempty"`
+}
+
+// EventType represents an entry in the event type catalog.
+type EventType struct {
+	ID            string         `json:"id"`
+	Name          string         `json:"name"`
+	Description   string         `json:"description,omitempty"`
+	Group         *string        `json:"group,omitempty"`
+	Schema        map[string]any `json:"schema,omitempty"`
+	SamplePayload any            `json:"sample_payload,omitempty"`
+	Deprecated    bool           `json:"deprecated"`
+	Public        bool           `json:"public"`
+	AutoCreated   bool           `json:"auto_created"`
+	ArchivedAt    *time.Time     `json:"archived_at,omitempty"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+}
+
+// CreateEventTypeRequest represents a request to create an event type.
+type CreateEventTypeRequest struct {
+	Name          string         `json:"name"`
+	Description   *string        `json:"description,omitempty"`
+	Group         *string        `json:"group,omitempty"`
+	Schema        map[string]any `json:"schema,omitempty"`
+	SamplePayload any            `json:"sample_payload,omitempty"`
+	Deprecated    *bool          `json:"deprecated,omitempty"`
+	Public        *bool          `json:"public,omitempty"`
+}
+
+// UpdateEventTypeRequest represents a request to update an event type. Group, Schema and
+// SamplePayload are omitted unless set; use Null to clear them.
+type UpdateEventTypeRequest struct {
+	Description   *string
+	Group         Optional[string]
+	Schema        Optional[map[string]any]
+	SamplePayload Optional[any]
+	Deprecated    *bool
+	Public        *bool
+}
+
+// MarshalJSON omits unset fields and sends explicit nulls for cleared ones.
+func (r UpdateEventTypeRequest) MarshalJSON() ([]byte, error) {
+	fields := map[string]any{}
+	if r.Description != nil {
+		fields["description"] = r.Description
+	}
+	if r.Deprecated != nil {
+		fields["deprecated"] = r.Deprecated
+	}
+	if r.Public != nil {
+		fields["public"] = r.Public
+	}
+	if r.Group.set {
+		fields["group"] = r.Group.value
+	}
+	if r.Schema.set {
+		fields["schema"] = r.Schema.value
+	}
+	if r.SamplePayload.set {
+		fields["sample_payload"] = r.SamplePayload.value
+	}
+	return json.Marshal(fields)
+}
+
+// EventTypesFilter represents filtering options for listing event types.
+type EventTypesFilter struct {
+	Limit           *int
+	Cursor          *string
+	Group           *string
+	NamePrefix      *string
+	IncludeArchived *bool
+}
+
+// ListEventTypesResponse represents a page of event types.
+type ListEventTypesResponse struct {
+	EventTypes []EventType
+	HasMore    bool
+	NextCursor *string
+}
+
+// EventTypeGroup represents a group name and its number of active event types.
+type EventTypeGroup struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+// Event represents an event created by a typed send.
+type Event struct {
+	ID               string            `json:"id"`
+	ProjectID        string            `json:"project_id"`
+	EventType        string            `json:"event_type"`
+	PayloadSHA256    string            `json:"payload_sha256"`
+	ContentType      string            `json:"content_type"`
+	SizeBytes        int64             `json:"size_bytes"`
+	FanoutStatus     string            `json:"fanout_status"`
+	MatchedCount     int               `json:"matched_count"`
+	Headers          map[string]string `json:"headers,omitempty"`
+	IdempotencyKey   *string           `json:"idempotency_key,omitempty"`
+	RetentionHours   *int              `json:"retention_hours,omitempty"`
+	TargetEndpointID *string           `json:"target_endpoint_id,omitempty"`
+	FannedOutAt      *time.Time        `json:"fanned_out_at,omitempty"`
+	DeletedAt        *time.Time        `json:"deleted_at,omitempty"`
+	CreatedAt        time.Time         `json:"created_at"`
+	PayloadAvailable bool              `json:"payload_available"`
+}
+
+// EventMessage represents one message fanned out from an event.
+type EventMessage struct {
+	ID            string     `json:"id"`
+	EndpointID    string     `json:"endpoint_id"`
+	Status        string     `json:"status"`
+	AttemptCount  int        `json:"attempt_count"`
+	NextAttemptAt *time.Time `json:"next_attempt_at,omitempty"`
+	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+}
+
+// EventDetail represents an event with its payload link and a page of its messages.
+type EventDetail struct {
+	Event
+	PayloadURL         *string        `json:"payload_url,omitempty"`
+	Messages           []EventMessage `json:"messages"`
+	MessagesHasMore    bool           `json:"messages_has_more"`
+	MessagesNextCursor *string        `json:"messages_next_cursor,omitempty"`
+}
+
+// EventsFilter represents filtering options for listing events.
+type EventsFilter struct {
+	Limit     *int
+	Cursor    *string
+	EventType *string
+	Since     *time.Time
+	Until     *time.Time
+}
+
+// GetEventParams controls paging of the messages returned with an event.
+type GetEventParams struct {
+	MessagesLimit  *int
+	MessagesCursor *string
+}
+
+// ListEventsResponse represents a page of events.
+type ListEventsResponse struct {
+	Events     []Event
+	HasMore    bool
+	NextCursor *string
+}
+
+// RecoverRequest represents a request to recover events an endpoint missed.
+type RecoverRequest struct {
+	Since time.Time  `json:"since"`
+	Until *time.Time `json:"until,omitempty"`
+}
+
+// RecoverResponse represents a newly started recover job.
+type RecoverResponse struct {
+	RecoverJobID string `json:"recover_job_id"`
+	Status       string `json:"status"`
+}
+
+// RecoverJob represents the state of a recover job.
+type RecoverJob struct {
+	RecoverJobID  string     `json:"recover_job_id"`
+	EndpointID    string     `json:"endpoint_id"`
+	Status        string     `json:"status"`
+	CreatedCount  int        `json:"created_count"`
+	RequeuedCount int        `json:"requeued_count"`
+	Since         time.Time  `json:"since"`
+	Until         time.Time  `json:"until"`
+	CreatedAt     time.Time  `json:"created_at"`
+	FinishedAt    *time.Time `json:"finished_at,omitempty"`
+}
+
+// SendTestEventRequest represents a request to send a test event to an endpoint.
+// Payload defaults to the event type's sample payload.
+type SendTestEventRequest struct {
+	EventType string `json:"event_type"`
+	Payload   any    `json:"payload,omitempty"`
+}
+
+// SendTestEventResponse represents the response from sending a test event.
+type SendTestEventResponse struct {
+	MessageID string `json:"message_id"`
+	Status    string `json:"status"`
+	EventType string `json:"event_type"`
+	IsTest    bool   `json:"is_test"`
 }
