@@ -171,7 +171,21 @@ type DLQMessage struct {
 	AttemptCount int    `json:"attempt_count"`
 	LastError    string `json:"last_error"`
 	CreatedAt    string `json:"created_at"`
-	FailedAt     string `json:"failed_at"`
+	// Deprecated: the server never sends failed_at; this field is always empty.
+	FailedAt string `json:"failed_at"`
+
+	Status            MessageStatus `json:"status"`
+	DeliveredAt       *time.Time    `json:"delivered_at,omitempty"`
+	FirstAttemptAt    *time.Time    `json:"first_attempt_at,omitempty"`
+	ResponseStatus    *int          `json:"response_status,omitempty"`
+	ResponseLatencyMs *int          `json:"response_latency_ms,omitempty"`
+	ProcessingMs      *int          `json:"processing_ms,omitempty"`
+	TotalDeliveryMs   *int          `json:"total_delivery_ms,omitempty"`
+	QueueWaitMs       *int          `json:"queue_wait_ms,omitempty"`
+	DeletedAt         *time.Time    `json:"deleted_at,omitempty"`
+	EventType         *string       `json:"event_type,omitempty"`
+	EventID           *string       `json:"event_id,omitempty"`
+	IsTest            bool          `json:"is_test,omitempty"`
 }
 
 // DLQResponse represents the response from querying the DLQ.
@@ -664,6 +678,12 @@ type Invoice struct {
 	Lines            []InvoiceLine `json:"lines"`
 }
 
+// InvoicesFilter represents pagination options for invoice listings.
+type InvoicesFilter struct {
+	Limit         *int
+	StartingAfter *string
+}
+
 // InvoicesResponse represents invoice history.
 type InvoicesResponse struct {
 	Invoices []Invoice
@@ -1000,6 +1020,11 @@ type apiError struct {
 	Code    string         `json:"code"`
 	Message string         `json:"message"`
 	Details map[string]any `json:"details,omitempty"`
+}
+
+type messageActionResult struct {
+	MessageID string        `json:"message_id"`
+	Status    MessageStatus `json:"status"`
 }
 
 type dlqDataResponse struct {
