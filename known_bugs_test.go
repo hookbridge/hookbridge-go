@@ -2,8 +2,10 @@ package hookbridge_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,7 +89,7 @@ func TestGetEndpointMetricsSendsEndpointID(t *testing.T) {
 
 func TestDLQMessageDecodesMessageSummary(t *testing.T) {
 	client := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, `{"data":{"messages":[{"message_id":"msg_1","endpoint":"https://example.com/hook","status":"failed_permanent","attempt_count":5,"created_at":"2026-01-02T03:04:05Z","delivered_at":null,"first_attempt_at":"2026-01-02T03:04:06Z","response_status":500,"response_latency_ms":120,"processing_ms":130,"total_delivery_ms":9000,"queue_wait_ms":12,"last_error":"HTTP 500","deleted_at":"2026-01-03T00:00:00Z","event_type":"order.created","event_id":"evt_1","is_test":true}],"has_more":true,"next_cursor":"c1"},"meta":{"request_id":"req_1"}}`)
+		io.WriteString(w, `{"data":{"messages":[{"message_id":"msg_1","endpoint":"https://example.com/hook","status":"failed_permanent","attempt_count":5,"created_at":"2026-01-02T03:04:05Z","delivered_at":null,"first_attempt_at":"2026-01-02T03:04:06Z","response_status":500,"response_latency_ms":120,"processing_ms":130,"total_delivery_ms":9000,"queue_wait_ms":12,"last_error":"HTTP 500","deleted_at":"2026-01-03T00:00:00Z"}],"has_more":true,"next_cursor":"c1"},"meta":{"request_id":"req_1"}}`)
 	})
 
 	resp, err := client.GetDLQMessages(context.Background(), nil)
@@ -121,9 +123,6 @@ func TestDLQMessageDecodesMessageSummary(t *testing.T) {
 		m.QueueWaitMs == nil || *m.QueueWaitMs != 12 {
 		t.Errorf("numeric fields = %+v", m)
 	}
-	if m.EventType == nil || *m.EventType != "order.created" || m.EventID == nil || *m.EventID != "evt_1" || !m.IsTest {
-		t.Errorf("event fields = %+v", m)
-	}
 }
 
 func TestListInvoicesSendsPagination(t *testing.T) {
@@ -154,5 +153,15 @@ func TestListInvoicesSendsPagination(t *testing.T) {
 	}
 	if gotQuery != "" {
 		t.Errorf("GetInvoices query = %q", gotQuery)
+	}
+}
+
+func TestDLQMessageMarshalOmitsEmptyStatus(t *testing.T) {
+	b, err := json.Marshal(hookbridge.DLQMessage{MessageID: "m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), `"status"`) {
+		t.Errorf("marshalled = %s", b)
 	}
 }

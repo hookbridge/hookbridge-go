@@ -174,7 +174,7 @@ type DLQMessage struct {
 	// Deprecated: the server never sends failed_at; this field is always empty.
 	FailedAt string `json:"failed_at"`
 
-	Status            MessageStatus `json:"status"`
+	Status            MessageStatus `json:"status,omitempty"`
 	DeliveredAt       *time.Time    `json:"delivered_at,omitempty"`
 	FirstAttemptAt    *time.Time    `json:"first_attempt_at,omitempty"`
 	ResponseStatus    *int          `json:"response_status,omitempty"`
@@ -183,9 +183,6 @@ type DLQMessage struct {
 	TotalDeliveryMs   *int          `json:"total_delivery_ms,omitempty"`
 	QueueWaitMs       *int          `json:"queue_wait_ms,omitempty"`
 	DeletedAt         *time.Time    `json:"deleted_at,omitempty"`
-	EventType         *string       `json:"event_type,omitempty"`
-	EventID           *string       `json:"event_id,omitempty"`
-	IsTest            bool          `json:"is_test,omitempty"`
 }
 
 // DLQResponse represents the response from querying the DLQ.
