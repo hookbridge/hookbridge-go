@@ -20,7 +20,7 @@ const (
 	defaultTimeout = 30 * time.Second
 	defaultRetries = 3
 	// Version is the SDK version, sent in the User-Agent header.
-	Version   = "2.3.0"
+	Version   = "2.4.0"
 	userAgent = "hookbridge-go/" + Version
 )
 
@@ -336,20 +336,20 @@ func (c *Client) ReplayBatch(ctx context.Context, messageIDs []string) (*ReplayB
 
 // RetryNow triggers an immediate retry of a message.
 func (c *Client) RetryNow(ctx context.Context, messageID string) (*Message, error) {
-	var resp apiResponse[Message]
+	var resp apiResponse[messageActionResult]
 	if err := c.do(ctx, http.MethodPost, "/v1/messages/"+messageID+"/retry-now", nil, &resp); err != nil {
 		return nil, err
 	}
-	return &resp.Data, nil
+	return &Message{ID: resp.Data.MessageID, Status: resp.Data.Status}, nil
 }
 
 // CancelRetry cancels a pending retry.
 func (c *Client) CancelRetry(ctx context.Context, messageID string) (*Message, error) {
-	var resp apiResponse[Message]
+	var resp apiResponse[messageActionResult]
 	if err := c.do(ctx, http.MethodPost, "/v1/messages/"+messageID+"/cancel", nil, &resp); err != nil {
 		return nil, err
 	}
-	return &resp.Data, nil
+	return &Message{ID: resp.Data.MessageID, Status: resp.Data.Status}, nil
 }
 
 // GetLogs retrieves delivery logs with optional filtering.
@@ -381,7 +381,12 @@ func (c *Client) GetLogs(ctx context.Context, filter *LogsFilter) (*LogsResponse
 
 // GetMetrics retrieves aggregated delivery metrics.
 func (c *Client) GetMetrics(ctx context.Context, window MetricsWindow) (*Metrics, error) {
-	path := buildWindowPath("/v1/metrics", window, nil, "endpoint_id")
+	return c.GetEndpointMetrics(ctx, window, nil)
+}
+
+// GetEndpointMetrics retrieves aggregated delivery metrics, optionally filtered to one endpoint.
+func (c *Client) GetEndpointMetrics(ctx context.Context, window MetricsWindow, endpointID *string) (*Metrics, error) {
+	path := buildWindowPath("/v1/metrics", window, endpointID, "endpoint_id")
 	var resp apiResponse[Metrics]
 	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
@@ -747,8 +752,21 @@ func (c *Client) GetUsageHistory(ctx context.Context, limit, offset *int) (*Usag
 
 // GetInvoices retrieves invoice history.
 func (c *Client) GetInvoices(ctx context.Context) (*InvoicesResponse, error) {
+	return c.ListInvoices(ctx, nil)
+}
+
+// ListInvoices retrieves invoice history with optional pagination.
+func (c *Client) ListInvoices(ctx context.Context, filter *InvoicesFilter) (*InvoicesResponse, error) {
+	path := appendQuery("/v1/billing/invoices", func(query url.Values) {
+		if filter == nil {
+			return
+		}
+		setInt(query, "limit", filter.Limit)
+		setString(query, "starting_after", filter.StartingAfter)
+	})
+
 	var resp apiResponse[[]Invoice]
-	if err := c.do(ctx, http.MethodGet, "/v1/billing/invoices", nil, &resp); err != nil {
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
 	}
 	return &InvoicesResponse{Invoices: resp.Data, HasMore: resp.Meta.HasMore}, nil
@@ -883,11 +901,20 @@ func (c *Client) GetInboundMessageAttempts(ctx context.Context, messageID string
 
 // ReplayInboundMessage replays a single inbound message.
 func (c *Client) ReplayInboundMessage(ctx context.Context, messageID string) (*ReplayBatchMessagesResponse, error) {
-	var resp ReplayBatchMessagesResponse
+	var resp struct {
+		Message string              `json:"message"`
+		Data    messageActionResult `json:"data"`
+	}
 	if err := c.do(ctx, http.MethodPost, "/v1/inbound-messages/"+messageID+"/replay", nil, &resp); err != nil {
 		return nil, err
 	}
-	return &resp, nil
+	return &ReplayBatchMessagesResponse{
+		Message: resp.Message,
+		Data: ReplayBatchResult{
+			Replayed: 1,
+			Results:  []ReplayResult{{MessageID: resp.Data.MessageID, Status: string(resp.Data.Status)}},
+		},
+	}, nil
 }
 
 // ReplayAllInboundMessages replays matching inbound messages.

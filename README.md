@@ -122,6 +122,7 @@ result, _ := client.Send(ctx, hookbridge.SendRequest{
 message, _ := client.GetMessage(ctx, result.MessageID)
 logs, _ := client.GetLogs(ctx, &hookbridge.LogsFilter{Limit: intPtr(100), EndpointID: &endpoint.ID})
 metrics, _ := client.GetMetrics(ctx, hookbridge.Window24Hour)
+endpointMetrics, _ := client.GetEndpointMetrics(ctx, hookbridge.Window24Hour, &endpoint.ID)
 timeseries, _ := client.GetTimeSeriesMetrics(ctx, hookbridge.Window24Hour, &endpoint.ID)
 
 _, _ = client.Replay(ctx, message.ID)
@@ -198,6 +199,7 @@ _ = rejections
 subscription, _ := client.GetSubscription(ctx)
 usage, _ := client.GetUsageHistory(ctx, intPtr(12), intPtr(0))
 invoices, _ := client.GetInvoices(ctx)
+page, _ := client.ListInvoices(ctx, &hookbridge.InvoicesFilter{Limit: intPtr(12), StartingAfter: &invoices.Invoices[len(invoices.Invoices)-1].ID})
 
 export, _ := client.CreateExport(ctx, hookbridge.CreateExportRequest{
 	StartTime: time.Now().Add(-24 * time.Hour).UTC(),
