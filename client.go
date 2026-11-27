@@ -361,6 +361,7 @@ func (c *Client) GetLogs(ctx context.Context, filter *LogsFilter) (*LogsResponse
 		if filter.Status != nil {
 			query.Set("status", string(*filter.Status))
 		}
+		setString(query, "endpoint_id", filter.EndpointID)
 		if filter.StartTime != nil {
 			query.Set("start_time", filter.StartTime.Format(time.RFC3339))
 		}

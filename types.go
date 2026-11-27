@@ -76,6 +76,9 @@ type Message struct {
 	DeletedAt         *time.Time    `json:"deleted_at,omitempty"`
 	DeletedByUserID   *string       `json:"deleted_by_user_id,omitempty"`
 	DeletedByAPIKeyID *string       `json:"deleted_by_api_key_id,omitempty"`
+	EventType         *string       `json:"event_type,omitempty"`
+	EventID           *string       `json:"event_id,omitempty"`
+	IsTest            bool          `json:"is_test,omitempty"`
 }
 
 // MessageSummary represents a summary of a message for log listings.
@@ -94,6 +97,9 @@ type MessageSummary struct {
 	QueueWaitMs       *int          `json:"queue_wait_ms,omitempty"`
 	LastError         *string       `json:"last_error,omitempty"`
 	DeletedAt         *string       `json:"deleted_at,omitempty"`
+	EventType         *string       `json:"event_type,omitempty"`
+	EventID           *string       `json:"event_id,omitempty"`
+	IsTest            bool          `json:"is_test,omitempty"`
 }
 
 // LogsResponse represents the response from querying logs.
@@ -105,11 +111,12 @@ type LogsResponse struct {
 
 // LogsFilter represents filtering options for log queries.
 type LogsFilter struct {
-	Status    *MessageStatus
-	StartTime *time.Time
-	EndTime   *time.Time
-	Limit     *int
-	Cursor    *string
+	Status     *MessageStatus
+	EndpointID *string
+	StartTime  *time.Time
+	EndTime    *time.Time
+	Limit      *int
+	Cursor     *string
 }
 
 // Metrics represents aggregated delivery metrics.
@@ -1335,27 +1342,30 @@ type EventTypeGroup struct {
 
 // Event represents an event created by a typed send.
 type Event struct {
-	ID               string            `json:"id"`
-	ProjectID        string            `json:"project_id"`
-	EventType        string            `json:"event_type"`
-	PayloadSHA256    string            `json:"payload_sha256"`
-	ContentType      string            `json:"content_type"`
-	SizeBytes        int64             `json:"size_bytes"`
-	FanoutStatus     string            `json:"fanout_status"`
-	MatchedCount     int               `json:"matched_count"`
-	Headers          map[string]string `json:"headers,omitempty"`
-	IdempotencyKey   *string           `json:"idempotency_key,omitempty"`
-	RetentionHours   *int              `json:"retention_hours,omitempty"`
-	TargetEndpointID *string           `json:"target_endpoint_id,omitempty"`
-	FannedOutAt      *time.Time        `json:"fanned_out_at,omitempty"`
-	DeletedAt        *time.Time        `json:"deleted_at,omitempty"`
-	CreatedAt        time.Time         `json:"created_at"`
-	PayloadAvailable bool              `json:"payload_available"`
+	ID             string            `json:"id"`
+	ProjectID      string            `json:"project_id"`
+	EventType      string            `json:"event_type"`
+	PayloadSHA256  string            `json:"payload_sha256"`
+	ContentType    string            `json:"content_type"`
+	SizeBytes      int64             `json:"size_bytes"`
+	FanoutStatus   string            `json:"fanout_status"`
+	MatchedCount   int               `json:"matched_count"`
+	Headers        map[string]string `json:"headers,omitempty"`
+	IdempotencyKey *string           `json:"idempotency_key,omitempty"`
+	RetentionHours *int              `json:"retention_hours,omitempty"`
+	// TargetEndpointID is a public endpoint id (ep_ followed by 32 hex characters).
+	TargetEndpointID *string        `json:"target_endpoint_id,omitempty"`
+	FannedOutAt      *time.Time     `json:"fanned_out_at,omitempty"`
+	DeletedAt        *time.Time     `json:"deleted_at,omitempty"`
+	CreatedAt        time.Time      `json:"created_at"`
+	PayloadAvailable bool           `json:"payload_available"`
+	StatusCounts     map[string]int `json:"status_counts,omitempty"`
 }
 
 // EventMessage represents one message fanned out from an event.
 type EventMessage struct {
-	ID            string     `json:"id"`
+	ID string `json:"id"`
+	// EndpointID is a public endpoint id (ep_ followed by 32 hex characters).
 	EndpointID    string     `json:"endpoint_id"`
 	Status        string     `json:"status"`
 	AttemptCount  int        `json:"attempt_count"`

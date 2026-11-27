@@ -52,7 +52,7 @@ ctx = hookbridge.ContextWithClientName(ctx, "my-tool/1.0")
 endpoints, err := client.ListEndpoints(ctx, nil)
 ```
 
-`ContextWithProject` sets `X-Hookbridge-Project` (the project an OAuth token acts on) and `ContextWithClientName` sets `X-Hookbridge-Client` (a caller name recorded in the audit log). Both work with any client and any method. Values containing control characters are rejected before a request is sent.
+`ContextWithProject` sets `X-Hookbridge-Project` (the project an OAuth token acts on) and `ContextWithClientName` sets `X-Hookbridge-Client` (a caller name recorded in the audit log). Both work with any client and any method. Values containing control characters are rejected before a request is sent. The name should be printable ASCII; the server truncates it to 200 bytes. It is self-reported and not authenticated.
 
 ## Outbound Endpoints
 
@@ -72,7 +72,7 @@ _ = client.DeleteEndpoint(ctx, endpoint.ID)
 
 ## Event Types and Events
 
-Define event types, subscribe endpoints to them, and send an event without naming an endpoint: it is fanned out to every endpoint whose subscriptions match. `Send` is unchanged.
+Define event types, subscribe endpoints to them, and send an event without naming an endpoint: it is fanned out to every endpoint whose subscriptions match. `Send` is unchanged. Endpoint ids on events (`TargetEndpointID`, event message `EndpointID`) are public `ep_...` ids.
 
 ```go
 _, _ = client.CreateEventType(ctx, hookbridge.CreateEventTypeRequest{Name: "order.created", Group: stringPtr("orders")})
@@ -90,6 +90,8 @@ sent, _ := client.SendEvent(ctx, hookbridge.SendEventRequest{
 event, _ := client.GetEvent(ctx, sent.EventID, nil) // FanoutStatus, MatchedCount, Messages
 events, _ := client.ListEvents(ctx, &hookbridge.EventsFilter{EventType: stringPtr("order.created")})
 _ = client.DeleteEvent(ctx, sent.EventID)
+// Event and EventDetail carry StatusCounts (message status -> count, plus "deleted").
+// Messages and log entries of typed sends carry EventType, EventID and IsTest.
 
 // Omitted fields stay unchanged on update; Null clears one.
 _, _ = client.UpdateEventType(ctx, "order.created", hookbridge.UpdateEventTypeRequest{
@@ -118,7 +120,7 @@ result, _ := client.Send(ctx, hookbridge.SendRequest{
 })
 
 message, _ := client.GetMessage(ctx, result.MessageID)
-logs, _ := client.GetLogs(ctx, &hookbridge.LogsFilter{Limit: intPtr(100)})
+logs, _ := client.GetLogs(ctx, &hookbridge.LogsFilter{Limit: intPtr(100), EndpointID: &endpoint.ID})
 metrics, _ := client.GetMetrics(ctx, hookbridge.Window24Hour)
 timeseries, _ := client.GetTimeSeriesMetrics(ctx, hookbridge.Window24Hour, &endpoint.ID)
 
